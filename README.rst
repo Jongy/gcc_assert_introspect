@@ -4,6 +4,14 @@ Assert Introspection
 (WIP) GCC plugin that creates ``pytest``-like assert introspection for C/C++, without
 any modifications required.
 
+TL;DR
+-----
+
+When ``assert(1 != n && n != 6 || n == 12 || !n || n > 43879)`` fails, you get this print before aborting::
+
+    > assert(1 != n && n != 6 || n == 12 || !n || n > 43879)
+      assert((((6 != 1) && (6 != 6)) || ((6 == 12) || (6 == 0))) || (6 > 43879))
+
 Why
 ---
 
@@ -52,6 +60,8 @@ compilation.
 Current PoC
 -----------
 
+*This was developed & tested with GCC 9.1.0 / 7.5.*
+
 Current PoC can be run with ``make test``. It compiles the plugin itself, then (with the plugin
 active) compiles a short file containing a simple function, then compiles another file (without
 the plugin this time) which calls that simple function.
@@ -59,18 +69,30 @@ the plugin this time) which calls that simple function.
 The simple function is defined as follows::
 
     int test_func(int n) {
-        assert(n == 1);
+        assert(1 != n && n != 6 || n == 12 || !n || n > 43879);
     }
 
-The test first calls it with ``1`` and we see the ``assert`` passes and nothing happens.
-Then it's called again with ``42``, this time the ``assert`` triggers and the program aborts.
-But since the plugin was active, we get a short print right before aborting::
+The test first calls it with ``5`` and we see the ``assert`` passes and nothing happens.
+Then it's called again with ``6``, this time the ``assert`` triggers and the program aborts.
+But since the plugin rewrote the assert, we get a much nicer print right before aborting::
 
-    name: 'n', value: 42
+    > assert(1 != n && n != 6 || n == 12 || !n || n > 43879)
+      assert((((6 != 1) && (6 != 6)) || ((6 == 12) || (6 == 0))) || (6 > 43879))
 
 Hooray :)
 
-I will now expand it to handle complex expressions inside ``assert`` s, and to generate useful
-prints, as close as possible to ``pytest`` s.
+TODOs
+-----
+
+* Include all relevant "fields" from the original assert - ``__LINE__``, function name etc.
+* Point at the specific subexpression that failed.
+* Relate variable values to their names.
+* Relate subexpression strings to values (function calls to their return values used in expression).
+  This will probably require to "recreate" the code of the function call from AST.
+* Show values of expressions inside function calls (for ``assert(f(n))`` show ``n`` as well)
+* Get rid of redundant parenthesis.
+* Write some tests to see it covers most
+* Test it on some real projects :D
+* Make it generic - not tied to glibc's ``assert``.
 
 See the plugin code for more information.
