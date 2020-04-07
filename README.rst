@@ -1,5 +1,76 @@
 Assert Introspection
 ====================
 
-GCC plugin that creates (well, will create) ``pytest``-like assert introspection for C/C++, without
+(WIP) GCC plugin that creates ``pytest``-like assert introspection for C/C++, without
 any modifications required.
+
+Why
+---
+
+I always preferred the short and concise ``assert(...)`` statements (as opposed to the cumbersome
+assert-equal, assert-less-than, assert-string-equal etc most C/C++ unit test libraries have).
+And not just for writing tests - ``assert`` s placed in regular code are very helpful to catch
+problems, and in many projects I use them extensively. However, often seeing them trigger
+is just not enough to pinpoint the problem.
+So you are required to change the code, add some prints and reproduce the problem if you really
+want to know what went wrong.
+
+I'm really tired of doing that (especially of converting ``assert`` s which have side effects to
+equivalent ``printf`` s, then having to convert them back when the problem is solved...)
+
+``pytest`` solved it nicely with their assert introspection. When an introspected ``assert`` fails
+in ``pytest``, it prints the values of all sub-expressions in the main assert expression. For
+example, when the following ``assert`` fails::
+
+    assert min([1, 2, 3]) - 5 + min(1, 2, 3) == max([5, 6, 5])
+
+``pytest`` prints::
+
+    >       assert min([1, 2, 3]) - 5 + min(1, 2, 3) == max([5, 6, 5])
+    E       assert ((1 - 5) + 1) == 6
+    E        +  where 1 = min([1, 2, 3])
+    E        +  and   1 = min(1, 2, 3)
+    E        +  and   6 = max([5, 6, 5])
+
+Very neat. I want that in C.
+
+How
+---
+
+``pytest`` does that by rewriting Python's AST (see a brief covering of it here_). This way, the
+asserted expression can be written naturally by the user, and after parsing into AST it can be
+rewritten they please to add the extra information.
+
+.. _here: http://pybites.blogspot.com/2011/07/behind-scenes-of-pytests-new-assertion.html
+
+In my case, since I want the expressions to be written naturally in C, we'll have to do something
+similar (so we get parsed C expressions).
+C is not a dynamic language like Python, so the AST can't be patched in runtime, it must be changed
+during compilation. This can be done by writing a GCC plugin that'll patch the AST during
+compilation.
+
+Current PoC
+-----------
+
+Current PoC can be run with ``make test``. It compiles the plugin itself, then (with the plugin
+active) compiles a short file containing a simple function, then compiles another file (without
+the plugin this time) which calls that simple function.
+
+The simple function is defined as follows::
+
+    int test_func(int n) {
+        assert(n == 1);
+    }
+
+The test first calls it with ``1`` and we see the ``assert`` passes and nothing happens.
+Then it's called again with ``42``, this time the ``assert`` triggers and the program aborts.
+But since the plugin was active, we get a short print right before aborting::
+
+    name: 'n', value: 42
+
+Hooray :)
+
+I will now expand it to handle complex expressions inside ``assert`` s, and to generate useful
+prints, as close as possible to ``pytest`` s.
+
+See the plugin code for more information.
