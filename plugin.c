@@ -68,7 +68,7 @@ static void free_parse_result(struct parse_result *res) {
     // params_tree is garbage collected (?)
 }
 
-static bool parse_expression(tree expr, struct parse_result *res);
+static bool parse_expression(tree *expr, struct parse_result *res);
 
 static bool parse_expression_binary(const char *op, tree expr, struct parse_result *res) {
     struct parse_result left, right;
@@ -78,10 +78,10 @@ static bool parse_expression_binary(const char *op, tree expr, struct parse_resu
     res->repr = NULL;
     res->params_tree = NULL_TREE;
 
-    if (!parse_expression(TREE_OPERAND(expr, 0), &left)) {
+    if (!parse_expression(&TREE_OPERAND(expr, 0), &left)) {
         goto out;
     }
-    if (!parse_expression(TREE_OPERAND(expr, 1), &right)) {
+    if (!parse_expression(&TREE_OPERAND(expr, 1), &right)) {
         goto out_free_left;
     }
 
@@ -112,10 +112,10 @@ out:
     return ret;
 }
 
-static bool parse_expression(tree expr, struct parse_result *res) {
+static bool parse_expression(tree *expr, struct parse_result *res) {
     const char *op;
 
-    switch (TREE_CODE(expr)) {
+    switch (TREE_CODE(*expr)) {
     case EQ_EXPR: op = "=="; break;
     case NE_EXPR: op = "!="; break;
     case LT_EXPR: op = "<"; break;
@@ -130,9 +130,12 @@ static bool parse_expression(tree expr, struct parse_result *res) {
     }
 
     if (op) {
-        return parse_expression_binary(op, expr, res);
+        return parse_expression_binary(op, *expr, res);
     } else {
-        res->params_tree = tree_cons(NULL_TREE, save_expr(expr), NULL_TREE);
+        // by wrapping expr in save_expr(), we ensure the original expression is evaluated
+        // only once (and not twice if we use the value when the params_tree is evaluated)
+        *expr = save_expr(*expr);
+        res->params_tree = tree_cons(NULL_TREE, *expr, NULL_TREE);
         // TODO specific types
         res->repr = xstrdup("%d");
         return res->repr != NULL;
@@ -141,7 +144,7 @@ static bool parse_expression(tree expr, struct parse_result *res) {
 
 static bool expression_repr_call(tree cond_expr, tree *call) {
     struct parse_result res;
-    if (!parse_expression(COND_EXPR_COND(cond_expr), &res)) {
+    if (!parse_expression(&COND_EXPR_COND(cond_expr), &res)) {
         printf("failed to parse expression! refusing to patch\n");
         return false;
     }
