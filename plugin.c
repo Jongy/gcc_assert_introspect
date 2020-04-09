@@ -31,6 +31,7 @@
 #include <print-tree.h>
 #include <tree-iterator.h>
 #include <c-family/c-common.h>
+#include <c-tree.h>
 
 
 int plugin_is_GPL_compatible; // must be defined for the plugin to run
@@ -68,9 +69,9 @@ static void free_parse_result(struct parse_result *res) {
     // params_tree is garbage collected (?)
 }
 
-static bool parse_expression(tree *expr, struct parse_result *res);
+static bool parse_expression(tree *expr, struct parse_result *res, int depth);
 
-static bool parse_expression_binary(const char *op, tree expr, struct parse_result *res) {
+static bool parse_expression_binary(const char *op, tree expr, struct parse_result *res, int depth) {
     struct parse_result left, right;
     bool ret = false;
     int required_size;
@@ -78,10 +79,10 @@ static bool parse_expression_binary(const char *op, tree expr, struct parse_resu
     res->repr = NULL;
     res->params_tree = NULL_TREE;
 
-    if (!parse_expression(&TREE_OPERAND(expr, 0), &left)) {
+    if (!parse_expression(&TREE_OPERAND(expr, 0), &left, depth + 1)) {
         goto out;
     }
-    if (!parse_expression(&TREE_OPERAND(expr, 1), &right)) {
+    if (!parse_expression(&TREE_OPERAND(expr, 1), &right, depth + 1)) {
         goto out_free_left;
     }
 
@@ -112,7 +113,7 @@ out:
     return ret;
 }
 
-static bool parse_expression(tree *expr, struct parse_result *res) {
+static bool parse_expression(tree *expr, struct parse_result *res, int depth) {
     const char *op;
 
     switch (TREE_CODE(*expr)) {
@@ -134,7 +135,26 @@ static bool parse_expression(tree *expr, struct parse_result *res) {
     }
 
     if (op) {
-        return parse_expression_binary(op, *expr, res);
+        bool ok = parse_expression_binary(op, *expr, res, depth);
+        if (ok) {
+            // wrap it in a COND_EXPR
+            char buf[1024];
+            sprintf(buf, " %*s%s passed\n", depth * 2, "", op);
+            tree params = tree_cons(NULL_TREE, build_string_literal(strlen(buf) + 1, buf), NULL_TREE);
+            tree call_passed = build_function_call(UNKNOWN_LOCATION, printf_decl, params);
+            sprintf(buf, " %*s%s failed\n", depth * 2, "", op);
+            params = tree_cons(NULL_TREE, build_string_literal(strlen(buf) + 1, buf), NULL_TREE);
+            tree call_failed = build_function_call(UNKNOWN_LOCATION, printf_decl, params);
+
+            tree saved_result = save_expr(*expr);
+
+            tree new_expr = build_conditional_expr(UNKNOWN_LOCATION, saved_result, false,
+                call_passed, NULL_TREE, UNKNOWN_LOCATION,
+                call_failed, NULL_TREE, UNKNOWN_LOCATION);
+
+            *expr = build_compound_expr(UNKNOWN_LOCATION, new_expr, saved_result);
+        }
+        return ok;
     } else {
         // by wrapping expr in save_expr(), we ensure the original expression is evaluated
         // only once (and not twice if we use the value when the params_tree is evaluated)
@@ -148,7 +168,7 @@ static bool parse_expression(tree *expr, struct parse_result *res) {
 
 static bool expression_repr_call(tree cond_expr, tree *call) {
     struct parse_result res;
-    if (!parse_expression(&COND_EXPR_COND(cond_expr), &res)) {
+    if (!parse_expression(&COND_EXPR_COND(cond_expr), &res, 0)) {
         printf("failed to parse expression! refusing to patch\n");
         return false;
     }
