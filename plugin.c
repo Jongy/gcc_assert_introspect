@@ -126,6 +126,10 @@ static bool parse_expression(tree *expr, struct parse_result *res) {
     case TRUTH_ANDIF_EXPR: op = "&&"; break;
     case TRUTH_OR_EXPR:
     case TRUTH_ORIF_EXPR: op = "||"; break;
+    case PLUS_EXPR: op = "+"; break;
+    case MINUS_EXPR: op = "-"; break;
+    case MULT_EXPR: op = "*"; break;
+    case TRUNC_DIV_EXPR: op = "/"; break;
     default: op = NULL; break;
     }
 

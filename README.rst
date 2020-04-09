@@ -94,5 +94,7 @@ TODOs
 * Write some tests to see it covers most
 * Test it on some real projects :D
 * Make it generic - not tied to glibc's ``assert``.
+* Subtraction of consts is represented by ``PLUS_EXPR`` with a negative ``INTEGER_CST``, handle
+  it nicely.
 
 See the plugin code for more information.

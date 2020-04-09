@@ -15,5 +15,5 @@ int func2(int n) {
 }
 
 int test_func(int n) {
-    assert(1 != n && n != 6 || n == 12 || !n || func2(n) > 43879);
+    assert((1 != n && n != 6) || n == 12 || !n || func2(n) > 43879 || n * 4 == 54 + n || n / 5 == 10 - n);
 }
