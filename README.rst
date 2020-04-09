@@ -86,6 +86,8 @@ TODOs
 
 * Include all relevant "fields" from the original assert - ``__LINE__``, function name etc.
 * Point at the specific subexpression that failed.
+* Don't evaluate expressions that were not evaluated by the original expression before
+  it failed (``(1 == 1 || f(1)) && 1 == 0`` should not evaluate ``f``)
 * Relate variable values to their names.
 * Relate subexpression strings to values (function calls to their return values used in expression).
   This will probably require to "recreate" the code of the function call from AST.
