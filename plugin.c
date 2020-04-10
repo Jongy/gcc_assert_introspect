@@ -32,6 +32,7 @@
 #include <tree-iterator.h>
 #include <c-family/c-common.h>
 #include <c-tree.h>
+#include <plugin-version.h>
 
 
 int plugin_is_GPL_compatible; // must be defined for the plugin to run
@@ -113,6 +114,18 @@ out:
     return ret;
 }
 
+static inline tree _build_conditional_expr(location_t colon_loc, tree ifexp, bool ifexp_bcp,
+    tree op1, tree op1_original_type, tree op2, tree op2_original_type) {
+
+#if GCCPLUGIN_VERSION >= 8001 // a32c8316ff282ec
+    return build_conditional_expr(colon_loc, ifexp, ifexp_bcp, op1, op1_original_type,
+        UNKNOWN_LOCATION, op2, op2_original_type, UNKNOWN_LOCATION);
+#else
+    return build_conditional_expr(colon_loc, ifexp, ifexp_bcp, op1, op1_original_type,
+        op2, op2_original_type);
+#endif
+}
+
 static bool parse_expression(tree *expr, struct parse_result *res, int depth) {
     const char *op;
 
@@ -148,9 +161,9 @@ static bool parse_expression(tree *expr, struct parse_result *res, int depth) {
 
             tree saved_result = save_expr(*expr);
 
-            tree new_expr = build_conditional_expr(UNKNOWN_LOCATION, saved_result, false,
-                call_passed, NULL_TREE, UNKNOWN_LOCATION,
-                call_failed, NULL_TREE, UNKNOWN_LOCATION);
+            tree new_expr = _build_conditional_expr(UNKNOWN_LOCATION, saved_result, false,
+                call_passed, NULL_TREE,
+                call_failed, NULL_TREE);
 
             *expr = build_compound_expr(UNKNOWN_LOCATION, new_expr, saved_result);
         }
@@ -310,6 +323,7 @@ static void finish_decl_callback(void *event_data, void *user_data) {
 int plugin_init(struct plugin_name_args *plugin_info, struct plugin_gcc_version *version) {
     register_callback(plugin_info->base_name, PLUGIN_PRE_GENERICIZE, pre_genericize_callback, NULL);
     register_callback(plugin_info->base_name, PLUGIN_FINISH_DECL, finish_decl_callback, NULL);
+    (void)gcc_version; // added by plugin-version.h ??
 
     return 0;
 }
