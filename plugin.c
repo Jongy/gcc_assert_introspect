@@ -126,10 +126,11 @@ static inline tree _build_conditional_expr(location_t colon_loc, tree ifexp, boo
 #endif
 }
 
-static bool parse_expression(tree *expr, struct parse_result *res, int depth) {
+// get textual repr of expr's operation, if it's a logical / mathematical operation.
+static const char *get_expr_op_repr(tree expr) {
     const char *op;
 
-    switch (TREE_CODE(*expr)) {
+    switch (TREE_CODE(expr)) {
     case EQ_EXPR: op = "=="; break;
     case NE_EXPR: op = "!="; break;
     case LT_EXPR: op = "<"; break;
@@ -144,6 +145,12 @@ static bool parse_expression(tree *expr, struct parse_result *res, int depth) {
     case TRUNC_DIV_EXPR: op = "/"; break;
     default: op = NULL; break;
     }
+
+    return op;
+}
+
+static bool parse_expression(tree *expr, struct parse_result *res, int depth) {
+    const char *op = get_expr_op_repr(*expr);
 
     if (op) {
         bool ok = parse_expression_binary(op, *expr, res, depth);
