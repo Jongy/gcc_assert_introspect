@@ -239,13 +239,11 @@ static tree make_conditional_expr_repr(location_t here, tree expr, tree buf_para
 
     // for TRUTH_ANDIF_EXPR/TRUTH_AND_EXPR:
     // * if left fails, we print only left
-    // * if right fails, we print left and right
+    // * if right fails, we print (...) && right
     // * if both pass, we print nothing
     if (code == TRUTH_ANDIF_EXPR || code == TRUTH_AND_EXPR) {
         tree stmts = alloc_stmt_list();
-        append_to_statement_list(make_repr_sprintf(here, buf_param, buf_pos, "(", NULL_TREE), &stmts);
-        append_to_statement_list(make_conditional_expr_repr(here, TREE_OPERAND(raw_expr, 0), buf_param, buf_pos), &stmts);
-        append_to_statement_list(make_repr_sprintf(here, buf_param, buf_pos, ") && (", NULL_TREE), &stmts);
+        append_to_statement_list(make_repr_sprintf(here, buf_param, buf_pos, "(...) && (", NULL_TREE), &stmts);
         append_to_statement_list(make_conditional_expr_repr(here, TREE_OPERAND(raw_expr, 1), buf_param, buf_pos), &stmts);
         append_to_statement_list(make_repr_sprintf(here, buf_param, buf_pos, ")", NULL_TREE), &stmts);
 
