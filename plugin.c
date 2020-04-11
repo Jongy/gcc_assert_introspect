@@ -47,12 +47,14 @@ static tree sprintf_decl = NULL_TREE;
 // ((void) sizeof ((EXPR) ? 1 : 0), __extension__ ({ if (EXPR) ; else __assert_fail ("EXPR", "file.c", line, __extension__ __PRETTY_FUNCTION__); }))
 // the generated cond_expr has COND_EXPR_COND as the assert's condition,
 // COND_EXPR_THEN is a nop_expr and COND_EXPR_ELSE is a call_expr calling to "__assert_fail".
-static bool is_assert_fail_cond_expr(tree cond_expr) {
-    gcc_assert(TREE_CODE(cond_expr) == COND_EXPR);
+static bool is_assert_fail_cond_expr(tree expr) {
+    if (TREE_CODE(expr) != COND_EXPR) {
+        return false;
+    }
 
-    tree expr_else = COND_EXPR_ELSE(cond_expr);
+    tree expr_else = COND_EXPR_ELSE(expr);
     return (
-        TREE_CODE(COND_EXPR_THEN(cond_expr)) == NOP_EXPR &&
+        TREE_CODE(COND_EXPR_THEN(expr)) == NOP_EXPR &&
         TREE_CODE(expr_else) == CALL_EXPR &&
         TREE_CODE(CALL_EXPR_FN(expr_else)) == ADDR_EXPR &&
         TREE_CODE(TREE_OPERAND(CALL_EXPR_FN(expr_else), 0)) == FUNCTION_DECL &&
@@ -377,8 +379,8 @@ static void iterate_bind_expr(tree bind) {
             }
         }
     } else {
-        gcc_assert(TREE_CODE(body) == COND_EXPR); // I don't know of other possible types yet
-
+        // for individual statements in BIND_EXPRs - check if they're the COND_EXPR of assert()s.
+        // see the docs of is_assert_fail_cond_expr().
         if (is_assert_fail_cond_expr(body)) {
             BIND_EXPR_BODY(bind) = patch_assert(body);
         }
@@ -390,7 +392,7 @@ static void pre_genericize_callback(void *event_data, void *user_data) {
 
     tree t = (tree)event_data;
 
-    if (TREE_CODE(t) != FUNCTION_DECL || 0 != strcmp("test_func", IDENTIFIER_POINTER(DECL_NAME(t)))) {
+    if (TREE_CODE(t) != FUNCTION_DECL) {
         return;
     }
 
