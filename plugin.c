@@ -191,9 +191,11 @@ static void set_up_repr_buf(location_t here, tree stmts, tree block, tree *buf_p
     tree pos = build_decl(here, VAR_DECL, NULL_TREE, TYPE_DOMAIN(buf_type));
     DECL_ARTIFICIAL(pos) = 1;
     DECL_CONTEXT(pos) = current_function_decl;
-    DECL_INITIAL(pos) = integer_zero_node;
-    finish_decl(pos, here, integer_zero_node, NULL_TREE, NULL_TREE);
+    finish_decl(pos, here, NULL_TREE, NULL_TREE, NULL_TREE);
     *buf_pos = pos;
+
+    append_to_statement_list(build_modify_expr(here, pos, NULL_TREE, NOP_EXPR, here,
+        integer_zero_node, NULL_TREE), &stmts);
 
     BLOCK_VARS(block) = buf;
     TREE_CHAIN(buf) = pos;
