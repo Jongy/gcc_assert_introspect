@@ -37,6 +37,8 @@
 
 #include "utils.h"
 
+#define PLUGIN_NAME "assert_introspect"
+
 int plugin_is_GPL_compatible; // must be defined for the plugin to run
 
 static tree printf_decl = NULL_TREE;
@@ -326,6 +328,15 @@ static tree make_conditional_expr_repr(location_t here, tree expr, tree buf_para
     }
 }
 
+static bool function_decl_missing_error(location_t here, tree func_decl, const char *name) {
+    if (func_decl == NULL_TREE) {
+        error_at(here, PLUGIN_NAME ": plugin requires declaration of '%s'\n", name);
+        return true;
+    }
+
+    return false;
+}
+
 static tree make_assert_failed_body(location_t here, tree cond_expr) {
     // the patched expression is as follows:
     //
@@ -345,6 +356,14 @@ static tree make_assert_failed_body(location_t here, tree cond_expr) {
     //
     // lastly, the assert repr is printed, and abort() is called.
 
+    if (function_decl_missing_error(here, printf_decl, "printf") ||
+        function_decl_missing_error(here, sprintf_decl, "sprintf") ||
+        function_decl_missing_error(here, abort_decl, "abort")) {
+
+        // continue unmodified.
+        return cond_expr;
+    }
+
     tree stmts = alloc_stmt_list();
     tree block = make_node(BLOCK);
 
@@ -362,12 +381,10 @@ static tree make_assert_failed_body(location_t here, tree cond_expr) {
     append_to_statement_list(make_repr_sprintf(here, buf_param, buf_pos, ")\n", NULL_TREE), &stmts);
 
     // print the repr buf now
-    gcc_assert(printf_decl != NULL_TREE);
     tree printf_repr_call = build_function_call(here, printf_decl, tree_cons(NULL_TREE, buf_param, NULL_TREE));
     append_to_statement_list(printf_repr_call, &stmts);
 
     // finally, an abort call
-    gcc_assert(abort_decl != NULL_TREE);
     tree abort_call = build_function_call(here, abort_decl, NULL_TREE);
     append_to_statement_list(abort_call, &stmts);
 
@@ -444,7 +461,7 @@ static void finish_decl_callback(void *event_data, void *user_data) {
 }
 
 int plugin_init(struct plugin_name_args *plugin_info, struct plugin_gcc_version *version) {
-    printf("assert_introspect loaded, compiled for GCC %s\n", gcc_version.basever);
+    printf(PLUGIN_NAME " loaded, compiled for GCC %s\n", gcc_version.basever);
     register_callback(plugin_info->base_name, PLUGIN_PRE_GENERICIZE, pre_genericize_callback, NULL);
     register_callback(plugin_info->base_name, PLUGIN_FINISH_DECL, finish_decl_callback, NULL);
 
