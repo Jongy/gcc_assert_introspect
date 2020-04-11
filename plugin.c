@@ -133,15 +133,11 @@ static tree make_assert_expr_printf(location_t here, tree call__assert_fail) {
     const size_t expr_len = TREE_STRING_LENGTH(arg1);
     gcc_assert(expr[expr_len - 1] == '\0'); // TREE_STRING_LENGTH should include the null terminator
 
-    const size_t line_len = sizeof("> assert()\n") + expr_len; // includes null terminator
-    char *line = (char*)xmalloc(line_len);
-    strcpy(line, "> assert(");
-    strcat(line, expr);
-    strcat(line, ")\n");
-
-    tree str_cst = build_string_literal(strlen(line) + 1, line);
-    free(line);
-    return build_function_call(here, printf_decl, tree_cons(NULL_TREE, str_cst, NULL_TREE));
+    tree expr_str = build_string_literal(expr_len, expr);
+    tree format_str = build_string_literal_from_literal("> assert(%s)\n");
+    return build_function_call(here, printf_decl,
+        tree_cons(NULL_TREE, format_str,
+        tree_cons(NULL_TREE, expr_str, NULL_TREE)));
 }
 
 // sets up the repr buffer we'll use later as a variable and registers it to the scope of "block".
