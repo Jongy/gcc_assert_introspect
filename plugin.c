@@ -366,23 +366,30 @@ static tree patch_assert(tree cond_expr) {
     return new_cond;
 }
 
-static void iterate_bind_expr(tree bind) {
-    gcc_assert(TREE_CODE(bind) == BIND_EXPR);
+static void iterate_function_body(tree expr) {
+    tree body;
 
-    tree body = BIND_EXPR_BODY(bind);
+    if (TREE_CODE(expr) == BIND_EXPR) {
+        body = BIND_EXPR_BODY(expr);
+    } else {
+        gcc_assert(TREE_CODE(expr) == STATEMENT_LIST);
+        body = expr;
+    }
+
     if (TREE_CODE(body) == STATEMENT_LIST) {
         for (tree_stmt_iterator i = tsi_start(body); !tsi_end_p(i); tsi_next(&i)) {
             tree stmt = tsi_stmt(i);
 
             if (TREE_CODE(stmt) == BIND_EXPR) {
-                iterate_bind_expr(stmt);
+                iterate_function_body(stmt);
             }
         }
     } else {
         // for individual statements in BIND_EXPRs - check if they're the COND_EXPR of assert()s.
         // see the docs of is_assert_fail_cond_expr().
         if (is_assert_fail_cond_expr(body)) {
-            BIND_EXPR_BODY(bind) = patch_assert(body);
+            gcc_assert(TREE_CODE(expr) == BIND_EXPR);
+            BIND_EXPR_BODY(expr) = patch_assert(body);
         }
     }
 }
@@ -392,17 +399,9 @@ static void pre_genericize_callback(void *event_data, void *user_data) {
 
     tree t = (tree)event_data;
 
-    if (TREE_CODE(t) != FUNCTION_DECL) {
-        return;
+    if (TREE_CODE(t) == FUNCTION_DECL) {
+        iterate_function_body(DECL_SAVED_TREE(t));
     }
-
-    tree bind = DECL_SAVED_TREE(t);
-    if (!bind || TREE_CODE(bind) != BIND_EXPR) {
-        printf("function body is not BIND_EXPR??\n");
-        return;
-    }
-
-    iterate_bind_expr(bind);
 }
 
 static void finish_decl_callback(void *event_data, void *user_data) {
