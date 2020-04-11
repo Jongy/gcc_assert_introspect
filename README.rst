@@ -69,22 +69,23 @@ the plugin this time) which calls that simple function.
 The simple function is defined as follows::
 
     int test_func(int n) {
-        assert(1 != n && n != 6 || n == 12 || !n || n > 43879);
+        assert((1 != n && n != 6 && n != 5 && func3(n)) || n == 5 || n == 12 || !n || func2(n) > 43879 || n * 4 == 54 + n || n / 5 == 10 - n);
     }
 
 The test first calls it with ``5`` and we see the ``assert`` passes and nothing happens.
 Then it's called again with ``6``, this time the ``assert`` triggers and the program aborts.
 But since the plugin rewrote the assert, we get a much nicer print right before aborting::
 
-    > assert(1 != n && n != 6 || n == 12 || !n || n > 43879)
-      assert((((6 != 1) && (6 != 6)) || ((6 == 12) || (6 == 0))) || (6 > 43879))
+    In 'plugin_test.c':33, function 'test_func':
+    > assert((1 != n && n != 6 && n != 5 && func3(n)) || n == 5 || n == 12 || !n || func2(n) > 43879 || n * 4 == 54 + n || n / 5 == 10 - n)
+      assert(((((((((...) && (6 != 6)))) || ((6 == 5) || (6 == 12))) || (6 == 0)) || (9 > 43879)) || (6 * 4 == 6 + 54)) || (6 / 5 == 10 - 6))
+
 
 Hooray :)
 
 TODOs
 -----
 
-* Include all relevant "fields" from the original assert - ``__LINE__``, function name etc.
 * Point at the specific subexpression that failed.
 * Relate variable values to their names.
 * Relate subexpression strings to values (function calls to their return values used in expression).

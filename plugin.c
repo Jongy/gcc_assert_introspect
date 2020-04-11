@@ -119,27 +119,49 @@ static void wrap_in_save_expr(tree *expr) {
     *expr = save_expr(*expr);
 }
 
-// create a printf("> assert(EXPR)\n") call (for the original assert() expression)
-static tree make_assert_expr_printf(location_t here, tree call__assert_fail) {
-    // grab the EXPR from the __assert_fail call (1st argument)
-    tree arg1 = CALL_EXPR_ARG(call__assert_fail, 0);
-    if (CONVERT_EXPR_P(arg1)) {
-        arg1 = TREE_OPERAND(arg1, 0);
+// gets the STRING_CST tree of argument 'n' passed to 'function'.
+static tree get_string_cst_arg(tree function, int n) {
+    tree arg = CALL_EXPR_ARG(function, n);
+    if (CONVERT_EXPR_P(arg)) {
+        arg = TREE_OPERAND(arg, 0);
     }
-    gcc_assert(TREE_CODE(arg1) == ADDR_EXPR);
+    gcc_assert(TREE_CODE(arg) == ADDR_EXPR);
 
-    arg1 = TREE_OPERAND(arg1, 0);
-    gcc_assert(TREE_CODE(arg1) == STRING_CST);
+    arg = TREE_OPERAND(arg, 0);
+    gcc_assert(TREE_CODE(arg) == STRING_CST);
 
-    const char *expr = TREE_STRING_POINTER(arg1);
-    const size_t expr_len = TREE_STRING_LENGTH(arg1);
-    gcc_assert(expr[expr_len - 1] == '\0'); // TREE_STRING_LENGTH should include the null terminator
+    // TREE_STRING_LENGTH should include the null terminator
+    gcc_assert(TREE_STRING_POINTER(arg)[TREE_STRING_LENGTH(arg) - 1] == '\0');
 
-    tree expr_str = build_string_literal(expr_len, expr);
+    return arg;
+}
+
+// create a printf("> assert(EXPR)\n") call (for the original assert() expression)
+static void make_assert_expr_printf(location_t here, tree call__assert_fail, tree *stmts) {
+    tree file_arg = get_string_cst_arg(call__assert_fail, 1);
+    tree function_arg = CALL_EXPR_ARG(call__assert_fail, 3);
+    tree line_arg = CALL_EXPR_ARG(call__assert_fail, 2);
+
+    char buf[1024];
+    // function_arg (that is, __PRETTY_FUNCTION__) is a variable, not a string constant.
+    // that's why you can't do e.g `printf("hello from " __PRETTY_FUNCTION__);`.
+    // for the same reason, we can't easily include it into the sprintf here (in compile time).
+    // I guess there are other ways to get the current function name at this point, but meh,
+    // we'll just print it in runtime.
+    // if this snprintf ever exceeds... not bothering to check it
+    (void)snprintf(buf, sizeof(buf), "In '%s':%ld, function '%%s':\n",
+        TREE_STRING_POINTER(file_arg), TREE_INT_CST_LOW(line_arg));
+
+    tree header_line = build_string_literal(strlen(buf) + 1, buf);
+    append_to_statement_list(build_function_call(here, printf_decl,
+        tree_cons(NULL_TREE, header_line,
+        tree_cons(NULL_TREE, function_arg, NULL_TREE))), stmts);
+
     tree format_str = build_string_literal_from_literal("> assert(%s)\n");
-    return build_function_call(here, printf_decl,
+    append_to_statement_list(build_function_call(here, printf_decl,
         tree_cons(NULL_TREE, format_str,
-        tree_cons(NULL_TREE, expr_str, NULL_TREE)));
+        // can just use the original argument directly in our call..
+        tree_cons(NULL_TREE, CALL_EXPR_ARG(call__assert_fail, 0), NULL_TREE))), stmts);
 }
 
 // sets up the repr buffer we'll use later as a variable and registers it to the scope of "block".
@@ -325,7 +347,7 @@ static tree make_assert_failed_body(location_t here, tree cond_expr) {
     tree block = make_node(BLOCK);
 
     // print "> assert(...)" with the original expression text
-    append_to_statement_list(make_assert_expr_printf(here, COND_EXPR_ELSE(cond_expr)), &stmts);
+    make_assert_expr_printf(here, COND_EXPR_ELSE(cond_expr), &stmts);
 
     tree buf_param, buf_pos;
     set_up_repr_buf(here, stmts, block, &buf_param, &buf_pos);
