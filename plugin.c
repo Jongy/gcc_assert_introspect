@@ -326,9 +326,9 @@ static void finish_decl_callback(void *event_data, void *user_data) {
 }
 
 int plugin_init(struct plugin_name_args *plugin_info, struct plugin_gcc_version *version) {
+    printf("assert_introspect loaded, compiled for GCC %s\n", gcc_version.basever);
     register_callback(plugin_info->base_name, PLUGIN_PRE_GENERICIZE, pre_genericize_callback, NULL);
     register_callback(plugin_info->base_name, PLUGIN_FINISH_DECL, finish_decl_callback, NULL);
-    (void)gcc_version; // added by plugin-version.h ??
 
     return 0;
 }
