@@ -60,7 +60,7 @@ compilation.
 Current PoC
 -----------
 
-*This was developed & tested with GCC 9.1.0 / 7.5.*
+*This was developed & tested with GCC 9.1.0 / 7.5. Actually latest commits broke GCC 7.5 support, this needs to be fixed*
 
 Current PoC can be run with ``make test``. It compiles the plugin itself, then (with the plugin
 active) compiles a short file containing a simple function, then compiles another file (without
@@ -86,8 +86,6 @@ TODOs
 
 * Include all relevant "fields" from the original assert - ``__LINE__``, function name etc.
 * Point at the specific subexpression that failed.
-* Don't evaluate expressions that were not evaluated by the original expression before
-  it failed (``(1 == 1 || f(1)) && 1 == 0`` should not evaluate ``f``)
 * Relate variable values to their names.
 * Relate subexpression strings to values (function calls to their return values used in expression).
   This will probably require to "recreate" the code of the function call from AST.
