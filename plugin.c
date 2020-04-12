@@ -309,7 +309,7 @@ static tree make_conditional_expr_repr(location_t here, tree expr, tree buf_para
         if (op != NULL) {
             // TODO handle escaping more nicely :/
             if (0 == strcmp(op, "%")) {
-                op = "%%%%"; // 2 levels of escaping: 1 for the sprintf emitted here, 1 for the printf later.
+                op = "%%"; // escape for the sprintf emitted here
             }
 
             char format[64];
@@ -376,12 +376,13 @@ static tree make_assert_failed_body(location_t here, tree cond_expr) {
     // wrap all subexpressions
     wrap_in_save_expr(&COND_EXPR_COND(cond_expr));
 
-    append_to_statement_list(make_repr_sprintf(here, buf_param, buf_pos, "  assert(", NULL_TREE), &stmts);
+    // write the expression repr itself
     append_to_statement_list(make_conditional_expr_repr(here, COND_EXPR_COND(cond_expr), buf_param, buf_pos), &stmts);
-    append_to_statement_list(make_repr_sprintf(here, buf_param, buf_pos, ")\n", NULL_TREE), &stmts);
 
     // print the repr buf now
-    tree printf_repr_call = build_function_call(here, printf_decl, tree_cons(NULL_TREE, buf_param, NULL_TREE));
+    tree printf_repr_call = build_function_call(here, printf_decl,
+        tree_cons(NULL_TREE, build_string_literal_from_literal("  assert(%s)\n"),
+        tree_cons(NULL_TREE, buf_param, NULL_TREE)));
     append_to_statement_list(printf_repr_call, &stmts);
 
     // finally, an abort call
