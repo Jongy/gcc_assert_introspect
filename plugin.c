@@ -240,7 +240,8 @@ static tree make_repr_sprintf(location_t here, tree buf_param, tree buf_pos, con
             tree_cons(NULL_TREE, make_buf_ref_addr(buf_param, buf_pos),
             tree_cons(NULL_TREE, build_string_literal(strlen(format) + 1, format), args)));
 
-    return build_modify_expr(here, buf_pos, NULL_TREE, PLUS_EXPR, here, sprintf_call, NULL_TREE);
+    // save_expr on sprintf_call required to avoid crashing on GCC 7.5.0, see commit message
+    return build_modify_expr(here, buf_pos, NULL_TREE, PLUS_EXPR, here, save_expr(sprintf_call), NULL_TREE);
 }
 
 static tree simple_nop_void(location_t here, tree expr) {

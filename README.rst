@@ -60,7 +60,7 @@ compilation.
 Current PoC
 -----------
 
-*This was developed & tested with GCC 9.1.0 / 7.5. Actually latest commits broke GCC 7.5 support, this needs to be fixed*
+*This was developed & tested with GCC 9.1.0 / 7.5.0*
 
 Current PoC can be run with ``make test``. It compiles the plugin itself, then (with the plugin
 active) compiles a short file containing a simple function, then compiles another file (without
