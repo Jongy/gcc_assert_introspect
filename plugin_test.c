@@ -20,7 +20,7 @@ int func3(int n) {
     abort();
 }
 
-int test_func(int n) {
-    assert((1 != n && n != 6 && n != 5 && func3(n)) || n == 5 || n == 12 || !n || func2(n) > 43879 || n * 4 == 54 + n || n / 5 == 10 - n);
+int test_func(int n, int m) {
+    assert((1 != n && n != 6 && n != 5 && func3(n)) || n == 5 || n == 12 || !n || func2(n) > 43879 || n * 4 == 54 + n || n / 5 == 10 - n || m == 93);
     return 5;
 }
