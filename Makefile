@@ -1,4 +1,4 @@
-PLUGIN = assert_introspection.so
+PLUGIN = assert_introspect.so
 
 all: $(PLUGIN)
 
