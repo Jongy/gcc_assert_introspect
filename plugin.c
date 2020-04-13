@@ -242,13 +242,48 @@ static tree strip_nop(tree expr) {
     return expr;
 }
 
+// NULL, defined as `(void*)0`, is an INTEGER_CST with type as POINTER_TYPE,
+// pointing to "char" with string-flag set. I couldn't find a way to separate those
+// from real string pointers, so this function comes in help.
+static bool is_NULL(tree expr) {
+    return integer_zerop(expr) &&
+        POINTER_TYPE_P(TREE_TYPE(expr)) &&
+        TYPE_STRING_FLAG(TREE_TYPE(TREE_TYPE(expr)));
+}
+
 static const char *get_format_for_expr(tree expr) {
     // this helps asserting we use the outer expression here, not the inner one (after e.g strip_nop)
     // beause we should pick a specifier for *after* the casts.
     assert_tree_is_save(expr);
 
-    // TODO specific types, not just %d
-    return "%d";
+    // it's okay to use the TREE_TYPE of SAVE_EXPR directly.
+    tree type = TREE_TYPE(expr);
+    if (POINTER_TYPE_P(type)) {
+        // check if pointed type is marked with "string-flag"
+        tree pointed_type = TREE_TYPE(type);
+        if (TYPE_STRING_FLAG(pointed_type) && !is_NULL(expr)) {
+            // assume it's also null terminated :) and a valid string, anyway.
+            return "\"%s\"";
+        } else {
+            return "%p";
+        }
+    } else if INTEGRAL_TYPE_P(type) {
+        const char *type_name = IDENTIFIER_POINTER(TYPE_IDENTIFIER(type));
+
+        if (0 == strcmp(type_name, "int")) {
+            return "%d";
+        } else if (0 == strcmp(type_name, "unsigned int")) {
+            return "%u";
+        } else if (0 == strcmp(type_name, "long int")) {
+            return "%ld";
+        } else if (0 == strcmp(type_name, "long unsigned int")) {
+            return "%lu";
+        } else {
+            printf("unknown integer type name '%s'\n", type_name);
+        }
+    }
+
+    gcc_unreachable();
 }
 
 // can't use GCC's build_tree_list - these lists use TREE_CHAIN to link entries,
