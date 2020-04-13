@@ -151,7 +151,7 @@ static void make_assert_expr_printf(location_t here, tree call__assert_fail, tre
     // I guess there are other ways to get the current function name at this point, but meh,
     // we'll just print it in runtime.
     // if this snprintf ever exceeds... not bothering to check it
-    (void)snprintf(buf, sizeof(buf), "In '%s':%ld, function '%%s':\n",
+    (void)snprintf(buf, sizeof(buf), "In %s:%ld, function '%%s':\n",
         TREE_STRING_POINTER(file_arg), TREE_INT_CST_LOW(line_arg));
 
     tree header_line = build_string_literal(strlen(buf) + 1, buf);
