@@ -324,11 +324,20 @@ static tree simple_nop_void(location_t here, tree expr) {
     return build1_loc(here, NOP_EXPR, void_type_node, expr);
 }
 
+// unites all "common" parameters of make_conditional_expr_repr so we don't have to pass
+// them each call.
+struct make_repr_params {
+    location_t here;
+    tree buf_param;
+    tree buf_pos;
+    struct expr_list *repr_exprs;
+};
+
 // this function is the core logic: it recursively generates a conditional expressions that walks
 // `expr`, following short cicuting rules, creating the repr buf for `expr` based on what subexpressions
 // have failed and which didn't. for example, if an && expression left-hand side fails, the generated
 // code will repr only the left side, without the right.
-static tree make_conditional_expr_repr(location_t here, tree expr, tree buf_param, tree buf_pos, struct expr_list *repr_exprs) {
+static tree make_conditional_expr_repr(struct make_repr_params *params, tree expr) {
     tree raw_expr = from_save_maybe(expr);
     const enum tree_code code = TREE_CODE(raw_expr);
 
@@ -338,6 +347,10 @@ static tree make_conditional_expr_repr(location_t here, tree expr, tree buf_para
         assert_tree_is_save(TREE_OPERAND(raw_expr, 1));
     }
 
+    location_t here = params->here;
+    tree buf_param = params->buf_param;
+    tree buf_pos = params->buf_pos;
+
     // for TRUTH_ANDIF_EXPR/TRUTH_AND_EXPR:
     // * if left fails, we print only left
     // * if right fails, we print (...) && right
@@ -345,14 +358,14 @@ static tree make_conditional_expr_repr(location_t here, tree expr, tree buf_para
     if (code == TRUTH_ANDIF_EXPR || code == TRUTH_AND_EXPR) {
         tree stmts = alloc_stmt_list();
         append_to_statement_list(make_repr_sprintf(here, buf_param, buf_pos, "(", NULL_TREE), &stmts);
-        append_to_statement_list(make_conditional_expr_repr(here, TREE_OPERAND(raw_expr, 0), buf_param, buf_pos, repr_exprs), &stmts);
+        append_to_statement_list(make_conditional_expr_repr(params, TREE_OPERAND(raw_expr, 0)), &stmts);
         append_to_statement_list(make_repr_sprintf(here, buf_param, buf_pos, ")", NULL_TREE), &stmts);
 
         tree left_stmts = stmts;
 
         stmts = alloc_stmt_list();
         append_to_statement_list(make_repr_sprintf(here, buf_param, buf_pos, "(...) && (", NULL_TREE), &stmts);
-        append_to_statement_list(make_conditional_expr_repr(here, TREE_OPERAND(raw_expr, 1), buf_param, buf_pos, repr_exprs), &stmts);
+        append_to_statement_list(make_conditional_expr_repr(params, TREE_OPERAND(raw_expr, 1)), &stmts);
         append_to_statement_list(make_repr_sprintf(here, buf_param, buf_pos, ")", NULL_TREE), &stmts);
 
         tree right_stmts = stmts;
@@ -369,9 +382,9 @@ static tree make_conditional_expr_repr(location_t here, tree expr, tree buf_para
     else if (code == TRUTH_ORIF_EXPR || code == TRUTH_OR_EXPR) {
         tree stmts = alloc_stmt_list();
         append_to_statement_list(make_repr_sprintf(here, buf_param, buf_pos, "(", NULL_TREE), &stmts);
-        append_to_statement_list(make_conditional_expr_repr(here, TREE_OPERAND(raw_expr, 0), buf_param, buf_pos, repr_exprs), &stmts);
+        append_to_statement_list(make_conditional_expr_repr(params, TREE_OPERAND(raw_expr, 0)), &stmts);
         append_to_statement_list(make_repr_sprintf(here, buf_param, buf_pos, ") || (", NULL_TREE), &stmts);
-        append_to_statement_list(make_conditional_expr_repr(here, TREE_OPERAND(raw_expr, 1), buf_param, buf_pos, repr_exprs), &stmts);
+        append_to_statement_list(make_conditional_expr_repr(params, TREE_OPERAND(raw_expr, 1)), &stmts);
         append_to_statement_list(make_repr_sprintf(here, buf_param, buf_pos, ")", NULL_TREE), &stmts);
 
         return _build_conditional_expr(here, raw_expr,
@@ -393,12 +406,12 @@ static tree make_conditional_expr_repr(location_t here, tree expr, tree buf_para
             sprintf(format, " %s ", op);
 
             tree stmts = alloc_stmt_list();
-            append_to_statement_list(make_conditional_expr_repr(here, TREE_OPERAND(raw_expr, 0), buf_param, buf_pos, repr_exprs), &stmts);
+            append_to_statement_list(make_conditional_expr_repr(params, TREE_OPERAND(raw_expr, 0)), &stmts);
             append_to_statement_list(make_repr_sprintf(here, buf_param, buf_pos, format, NULL_TREE), &stmts);
-            append_to_statement_list(make_conditional_expr_repr(here, TREE_OPERAND(raw_expr, 1), buf_param, buf_pos, repr_exprs), &stmts);
+            append_to_statement_list(make_conditional_expr_repr(params, TREE_OPERAND(raw_expr, 1)), &stmts);
             return stmts;
         } else {
-            append_subexpression_repr(expr, repr_exprs);
+            append_subexpression_repr(expr, params->repr_exprs);
 
             // TODO specific types, not just %d
             return make_repr_sprintf(here, buf_param, buf_pos, "%d",
@@ -457,7 +470,13 @@ static tree make_assert_failed_body(location_t here, tree cond_expr) {
 
     // write the expression repr itself
     struct expr_list repr_exprs = {0};
-    append_to_statement_list(make_conditional_expr_repr(here, COND_EXPR_COND(cond_expr), buf_param, buf_pos, &repr_exprs), &stmts);
+    struct make_repr_params params = {
+        .here = here,
+        .buf_param = buf_param,
+        .buf_pos = buf_pos,
+        .repr_exprs = &repr_exprs,
+    };
+    append_to_statement_list(make_conditional_expr_repr(&params, COND_EXPR_COND(cond_expr)), &stmts);
 
     // print the repr buf now
     tree printf_repr_call = build_function_call(here, printf_decl,
