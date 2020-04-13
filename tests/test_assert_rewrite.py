@@ -5,11 +5,14 @@ import signal
 from tempfile import NamedTemporaryFile, mkdtemp
 import pytest
 
+from conftest import GCC
+
 
 ASSERT_INTROSPECT_SO = os.path.abspath(
     os.path.join(os.path.dirname(__file__), "..", "assert_introspect.so"))
 
 HEADERS = "#include <assert.h>\n#include <stdio.h>\n#include <stdlib.h>\n"
+
 
 def run_tester(test_prototype, test_code, calling_code, *, extra_test="",
                skip_first=True):
@@ -19,7 +22,7 @@ def run_tester(test_prototype, test_code, calling_code, *, extra_test="",
 
         test.write(HEADERS + extra_test + "{0} {{ {1} }}".format(test_prototype, test_code))
         test.flush()
-        subprocess.check_call(["gcc", "-fplugin={}".format(ASSERT_INTROSPECT_SO), "-c",
+        subprocess.check_call([GCC, "-fplugin={}".format(ASSERT_INTROSPECT_SO), "-c",
                                test.name, "-o", obj.name])
 
         caller.write(HEADERS + "{0}; int main(void) {{ setlinebuf(stdout); {1}; return 0; }}"
@@ -29,7 +32,7 @@ def run_tester(test_prototype, test_code, calling_code, *, extra_test="",
         try:
             output_file = os.path.join(output_dir, "out")
 
-            subprocess.check_call(["gcc", "-o", output_file, obj.name, caller.name])
+            subprocess.check_call([GCC, "-o", output_file, obj.name, caller.name])
             with pytest.raises(subprocess.CalledProcessError) as e:
                 subprocess.check_output([output_file])
 
