@@ -97,9 +97,8 @@ def test_subexpression_function_call_repr():
         "> assert(f(12, n) == 5)",
         "  assert(32 == 5)",
         "> subexpressions:",
+        "  20 = n",
         "  32 = f(12, 20)",
-        # TODO 'n' should be here as well, current code doesn't look into variables
-        # used in CALL_EXPRs
     ]
 
 
@@ -114,6 +113,7 @@ def test_subexpression_string_repr():
         '> assert(strstr("hello world", s) == NULL)',
         '  assert("world" == (nil))',
         '> subexpressions:',
+        '  "world" = s',
         '  "world" = strstr("hello world", "world")'
     ]
 

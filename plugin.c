@@ -317,7 +317,7 @@ static void append_decl_subexpression_repr(tree expr, tree raw_expr, struct expr
     list->next = new_list;
 }
 
-static void make_subexpressions_repr(location_t here, struct expr_list *list, tree *stmts) {
+static void make_decl_subexpressions_repr(location_t here, struct expr_list *list, tree *stmts) {
     list = list->next; // skip first
 
     while (list) {
@@ -369,9 +369,11 @@ struct make_repr_params {
     struct expr_list *repr_exprs;
 };
 
+static void make_subexpressions_repr(tree expr, tree *stmts, struct make_repr_params *params);
+
 // builds a sprintf into params->call_buf_param in the format
 // `%result = sprintf(buf + pos, "%d = function(%d, %d, %d)", return, arg1, arg2, arg3)`
-static tree make_call_subexpression_repr(tree expr, tree raw_expr, struct make_repr_params *params) {
+static void make_call_subexpression_repr(tree expr, tree raw_expr, tree *stmts, struct make_repr_params *params) {
     gcc_assert(TREE_CODE(raw_expr) == CALL_EXPR);
 
     char buf[1024];
@@ -389,6 +391,9 @@ static tree make_call_subexpression_repr(tree expr, tree raw_expr, struct make_r
         tree *argp = CALL_EXPR_ARGP(raw_expr) + i;
         *argp = save_expr(*argp); // it will be evaluated twice, save it.
 
+        // recursively, for my arguments
+        make_subexpressions_repr(*argp, stmts, params);
+
         n += snprintf(buf + n, sizeof(buf) - n, "%s, ", get_format_for_expr(*argp));
         chainon(call_params, tree_cons(NULL_TREE, *argp, NULL_TREE));
     }
@@ -396,8 +401,18 @@ static tree make_call_subexpression_repr(tree expr, tree raw_expr, struct make_r
     n -= 2; // (remove last ", ")
     n += snprintf(buf + n, sizeof(buf) - n, ")\n");
 
-    return make_repr_sprintf(params->here, params->call_buf_param, params->call_buf_pos,
-        buf, call_params);
+    append_to_statement_list(make_repr_sprintf(params->here, params->call_buf_param, params->call_buf_pos,
+        buf, call_params), stmts);
+}
+
+static void make_subexpressions_repr(tree expr, tree *stmts, struct make_repr_params *params) {
+    tree inner = strip_nop(from_save_maybe(expr));
+
+    if (DECL_P(inner)) {
+        append_decl_subexpression_repr(expr, inner, params->repr_exprs);
+    } else if (TREE_CODE(inner) == CALL_EXPR) {
+        make_call_subexpression_repr(expr, inner, stmts, params);
+    }
 }
 
 // this function is the core logic: it recursively generates a conditional expressions that walks
@@ -478,13 +493,7 @@ static tree make_conditional_expr_repr(struct make_repr_params *params, tree exp
             append_to_statement_list(make_repr_sprintf(here, buf_param, buf_pos, format, NULL_TREE), &stmts);
             append_to_statement_list(make_conditional_expr_repr(params, TREE_OPERAND(raw_expr, 1)), &stmts);
         } else {
-            tree inner = strip_nop(raw_expr);
-
-            if (DECL_P(inner)) {
-                append_decl_subexpression_repr(expr, inner, params->repr_exprs);
-            } else if (TREE_CODE(inner) == CALL_EXPR) {
-                append_to_statement_list(make_call_subexpression_repr(expr, inner, params), &stmts);
-            }
+            make_subexpressions_repr(expr, &stmts, params);
 
             append_to_statement_list(make_repr_sprintf(here, buf_param, buf_pos, get_format_for_expr(expr),
                 tree_cons(NULL_TREE, expr, NULL_TREE)), &stmts);
@@ -567,8 +576,8 @@ static tree make_assert_failed_body(location_t here, tree cond_expr) {
         tree_cons(NULL_TREE, build_string_literal_from_literal("> subexpressions:\n"), NULL_TREE)),
         &stmts);
 
-    // add subexpressions repr
-    make_subexpressions_repr(here, &repr_exprs, &stmts);
+    // add DECLs subexpressions repr
+    make_decl_subexpressions_repr(here, &repr_exprs, &stmts);
 
     // print call buf repr
     printf_call = build_function_call(here, printf_decl,
