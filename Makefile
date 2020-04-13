@@ -11,10 +11,11 @@ plugin_test.o: plugin_test.c $(PLUGIN)
 tester: tester.c plugin_test.o
 	gcc $^ -o $@
 
-test: tester
+run: tester
 	./tester
 
-run: plugin_test.o
+test: $(PLUGIN)
+	cd tests && pytest -vv .
 
 clean:
 	rm -f $(PLUGIN) *.o

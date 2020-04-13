@@ -88,6 +88,12 @@ But since the plugin rewrote the assert, we get a much nicer print right before 
 
 Hooray :)
 
+Tests
+-----
+
+Run with ``make test``. They'll compile some test programs and check their output. You
+can use it to verify your local GCC is okay with the plugin.
+
 TODOs
 -----
 
