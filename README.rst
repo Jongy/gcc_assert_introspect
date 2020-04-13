@@ -92,9 +92,8 @@ TODOs
 -----
 
 * Point at the specific subexpression that failed.
-* Relate subexpression strings to values (function calls to their return values used in expression).
-  This will probably require to "recreate" the code of the function call from AST.
-* Show values of expressions inside function calls (for ``assert(f(n))`` show ``n`` as well)
+* Relate subexpression strings to values. We already relate variables and results of function calls,
+  others might be useful as well (for example, results of arithmetics?)
 * Get rid of redundant parenthesis.
 * Write some tests to see it covers most
 * Test it on some real projects :D
