@@ -22,8 +22,9 @@ def run_tester(test_prototype, test_code, calling_code, *, extra_test="",
 
         test.write(HEADERS + extra_test + "{0} {{ {1} }}".format(test_prototype, test_code))
         test.flush()
-        subprocess.check_call([GCC, "-fplugin={}".format(ASSERT_INTROSPECT_SO), "-c",
-                               test.name, "-o", obj.name])
+        subprocess.check_call([GCC, "-Werror", "-Wall",
+                               "-fplugin={}".format(ASSERT_INTROSPECT_SO),
+                               "-c", test.name, "-o", obj.name])
 
         caller.write(HEADERS + "{0}; int main(void) {{ setlinebuf(stdout); {1}; return 0; }}"
             .format(test_prototype, calling_code))
