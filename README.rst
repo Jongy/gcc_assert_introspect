@@ -1,18 +1,29 @@
 Assert Introspection
 ====================
 
-(WIP) GCC plugin that creates ``pytest``-like assert introspection for C/C++, without
-any modifications required.
+(WIP) GCC plugin that creates ``pytest``-like assert introspection for C (and possibly C++),
+without any code modifications required.
 
 TL;DR
 -----
 
-When ``assert(1 != n && n != 6 || n == 12 || !n || n > 43879)`` fails, you get this print before aborting::
+When ``assert(1 != n && n != 6)`` fails, you get this print before aborting::
 
-    > assert(1 != n && n != 6 || n == 12 || !n || n > 43879)
-      assert((((6 != 1) && (6 != 6)) || ((6 == 12) || (6 == 0))) || (6 > 43879))
+    In file myfile.c:42, function 'test_function':
+    > assert(1 != n && n != 6)
+      assert((...) && 6 != 6)
     > subexpressions:
       6 = n
+
+Function calls and strings inside the ``assert`` are also displayed nicely::
+
+    // s is "42";
+
+    > assert(strtol(s, NULL, 0) == 5)
+      assert(42 == 5)
+    > subexpressions:
+      "42" = s
+      42 = strtol("42", (nil), 0)
 
 Why
 ---
@@ -20,9 +31,10 @@ Why
 I always preferred the short and concise ``assert(...)`` statements (as opposed to the cumbersome
 assert-equal, assert-less-than, assert-string-equal etc most C/C++ unit test libraries have).
 And not just for writing tests - ``assert`` s placed in regular code are very helpful to catch
-problems, and in many projects I use them extensively. However, often seeing them trigger
-is just not enough to pinpoint the problem.
-So you are required to change the code, add some prints and reproduce the problem if you really
+problems, and in many projects I use them extensively, especially during early development,
+when they are very likely to fail... :) However, often seeing them trigger is just not enough to
+pinpoint the problem.
+So you are required to change the code, add some prints and reproduce the problem if you
 want to know what went wrong.
 
 I'm really tired of doing that (especially of converting ``assert`` s which have side effects to
@@ -78,12 +90,13 @@ The test first calls it with ``5, 2`` and we see the ``assert`` passes and nothi
 Then it's called again with ``6, 5``, this time the ``assert`` triggers and the program aborts.
 But since the plugin rewrote the assert, we get a much nicer print right before aborting::
 
-    In 'plugin_test.c':33, function 'test_func':
+    In plugin_test.c:33, function 'test_func':
     > assert((1 != n && n != 6 && n != 5 && func3(n)) || n == 5 || n == 12 || !n || func2(n) > 43879 || n * 4 == 54 + n || n / 5 == 10 - n || m == 93)
       assert((((((((((...) && (6 != 6)))) || ((6 == 5) || (6 == 12))) || (6 == 0)) || (9 > 43879)) || (6 * 4 == 6 + 54)) || (6 / 5 == 10 - 6)) || (5 == 93))
     > subexpressions:
       6 = n
       5 = m
+      9 = func2(6)
 
 
 Hooray :)
