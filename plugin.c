@@ -340,14 +340,14 @@ static void make_decl_subexpressions_repr(location_t here, struct expr_list *lis
     }
 }
 
-static tree make_buf_ref_addr(tree buf_param, tree buf_pos) {
-    return build_addr(build_array_ref(UNKNOWN_LOCATION, buf_param, buf_pos));
+static tree make_buf_ref_addr(location_t here, tree buf_param, tree buf_pos) {
+    return build_addr(build_array_ref(here, buf_param, buf_pos));
 }
 
 // creats a `buf_pos += sprintf(...)` with given arguments.
 static tree make_repr_sprintf(location_t here, tree buf_param, tree buf_pos, const char *format, tree args) {
     tree sprintf_call = build_function_call(here, sprintf_decl,
-            tree_cons(NULL_TREE, make_buf_ref_addr(buf_param, buf_pos),
+            tree_cons(NULL_TREE, make_buf_ref_addr(here, buf_param, buf_pos),
             tree_cons(NULL_TREE, build_string_literal(strlen(format) + 1, format), args)));
 
     // save_expr on sprintf_call required to avoid crashing on GCC 7.5.0, see commit message
