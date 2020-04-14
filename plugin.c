@@ -35,8 +35,6 @@
 #include <c-tree.h>
 #include <plugin-version.h>
 
-#include "utils.h"
-
 #define PLUGIN_NAME "assert_introspect"
 
 int plugin_is_GPL_compatible; // must be defined for the plugin to run
