@@ -23,9 +23,6 @@ def run_tester(test_prototype, test_code, calling_code, *, extra_test="",
         test.write(HEADERS + extra_test + "{0} {{ {1} }}".format(test_prototype, test_code))
         test.flush()
         extra_opts = ["-Werror", "-Wall", ]
-        if b"9.1.0" in subprocess.check_output([GCC, "--version"]):
-            # TODO -Werror kills GCC 9.1.0 if the plugin is active
-            extra_opts = []
         subprocess.check_call([GCC,
                                "-fplugin={}".format(ASSERT_INTROSPECT_SO),
                                "-c", test.name, "-o", obj.name] + extra_opts)

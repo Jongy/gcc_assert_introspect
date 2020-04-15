@@ -8,7 +8,7 @@ $(PLUGIN): plugin.c
 	$(GXX) -g -Wall -Werror -I`$(GCC) -print-file-name=plugin`/include -fpic -shared -o $@ $<
 
 plugin_test.o: plugin_test.c $(PLUGIN)
-	$(GCC) -O2 -fplugin=./$(PLUGIN) plugin_test.c -c
+	$(GCC) -Wall -Werror -O2 -fplugin=./$(PLUGIN) plugin_test.c -c
 
 tester: tester.c plugin_test.o
 	$(GCC) $^ -o $@
