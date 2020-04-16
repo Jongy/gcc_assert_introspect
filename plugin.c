@@ -37,8 +37,17 @@
 
 #define PLUGIN_NAME "assert_introspect"
 
-#define BOLD_RED(s) "\x1b[1m\x1b[31m" s "\x1b[0m"
-#define BOLD_BLUE(s) "\x1b[1m\x1b[34m" s "\x1b[0m"
+#define RESET_COLOR "\x1b[0m"
+#define BOLD "\x1b[1m"
+#define DARK "\x1b[2m"
+#define RED "\x1b[31m"
+#define GREEN "\x1b[32m"
+#define YELLOW "\x1b[33m"
+#define BLUE "\x1b[34m"
+#define MAGENTA "\x1b[35m"
+#define CYAN "\x1b[36m"
+#define BOLD_RED(s) BOLD RED  s RESET_COLOR
+#define BOLD_BLUE(s) BOLD BLUE s RESET_COLOR
 
 int plugin_is_GPL_compatible; // must be defined for the plugin to run
 
@@ -382,18 +391,53 @@ static void make_assert_expr_printf_from_ast(location_t here, tree cond_expr, tr
             stmts);
 }
 
+static const char *SUBEXPR_COLORS[] = {
+    BOLD GREEN,
+    BOLD YELLOW,
+    BOLD MAGENTA,
+    BOLD CYAN,
+    DARK RED,
+    DARK BLUE,
+    DARK GREEN,
+    DARK YELLOW,
+    // enough
+};
+
+// unites all "common" parameters of make_conditional_expr_repr so we don't have to pass
+// them each call.
+struct make_repr_params {
+    location_t here;
+    tree buf_param;
+    tree buf_pos;
+    tree call_buf_param;
+    tree call_buf_pos;
+    struct expr_list *repr_exprs;
+    size_t color_idx;
+};
+
+// returns next usable color by subexpr reprs.
+static const char *get_subexpr_color(struct make_repr_params *params) {
+    if (params->color_idx < ARRAY_SIZE(SUBEXPR_COLORS)) {
+        return SUBEXPR_COLORS[params->color_idx++];
+    }
+
+    return NULL;
+}
+
 // can't use GCC's build_tree_list - these lists use TREE_CHAIN to link entries,
 // but we can't override the TREE_CHAIN of existing exprs.
 // so use this lousy list instead
 struct expr_list {
     tree expr;
+    const char *color;
     struct expr_list *next;
 };
 
-static void append_decl_subexpression_repr(tree expr, tree raw_expr, struct expr_list *list) {
+static const char *append_decl_subexpression_repr(tree expr, tree raw_expr, struct make_repr_params *params) {
     gcc_assert(DECL_P(raw_expr));
 
     // iterate existing statements, don't add same expression again
+    struct expr_list *list = params->repr_exprs;
 
     // we skip the first, it's a dummy entry
     while (list->next) {
@@ -401,7 +445,7 @@ static void append_decl_subexpression_repr(tree expr, tree raw_expr, struct expr
         // an expression is met, so if a variable is used multiple times it'll have multiple
         // SAVE_EXPRs. but still only one DECL.
         if (from_save_maybe(list->next->expr) == from_save_maybe(expr)) {
-            return;
+            return list->next->color;
         }
 
         list = list->next;
@@ -410,7 +454,10 @@ static void append_decl_subexpression_repr(tree expr, tree raw_expr, struct expr
     struct expr_list *new_list = (struct expr_list *)xmalloc(sizeof(*new_list));
     new_list->expr = expr;
     new_list->next = NULL;
+    new_list->color = get_subexpr_color(params);
     list->next = new_list;
+
+    return new_list->color;
 }
 
 static void make_decl_subexpressions_repr(location_t here, struct expr_list *list, tree *stmts) {
@@ -421,8 +468,8 @@ static void make_decl_subexpressions_repr(location_t here, struct expr_list *lis
         tree raw_expr = strip_nop(from_save_maybe(expr));
 
         char buf[1024];
-        (void)snprintf(buf, sizeof(buf), "  %s = %s\n", get_format_for_expr(expr),
-            IDENTIFIER_POINTER(DECL_NAME(raw_expr)));
+        (void)snprintf(buf, sizeof(buf), "  %s%s = %s%s\n", list->color ?: "", get_format_for_expr(expr),
+            IDENTIFIER_POINTER(DECL_NAME(raw_expr)), list->color ? RESET_COLOR : "");
 
         tree printf_call = my_build_function_call(here, printf_decl,
             tree_cons(NULL_TREE, build_string_literal(strlen(buf) + 1, buf),
@@ -454,22 +501,11 @@ static tree simple_nop_void(location_t here, tree expr) {
     return build1_loc(here, NOP_EXPR, void_type_node, expr);
 }
 
-// unites all "common" parameters of make_conditional_expr_repr so we don't have to pass
-// them each call.
-struct make_repr_params {
-    location_t here;
-    tree buf_param;
-    tree buf_pos;
-    tree call_buf_param;
-    tree call_buf_pos;
-    struct expr_list *repr_exprs;
-};
-
-static void make_subexpressions_repr(tree expr, tree *stmts, struct make_repr_params *params);
+static const char *make_subexpressions_repr(tree expr, tree *stmts, struct make_repr_params *params);
 
 // builds a sprintf into params->call_buf_param in the format
 // `%result = sprintf(buf + pos, "%d = function(%d, %d, %d)", return, arg1, arg2, arg3)`
-static void make_call_subexpression_repr(tree expr, tree raw_expr, tree *stmts, struct make_repr_params *params) {
+static const char *make_call_subexpression_repr(tree expr, tree raw_expr, tree *stmts, struct make_repr_params *params) {
     gcc_assert(TREE_CODE(raw_expr) == CALL_EXPR);
 
     char buf[1024];
@@ -477,8 +513,10 @@ static void make_call_subexpression_repr(tree expr, tree raw_expr, tree *stmts, 
     tree fn = get_callee_fndecl(raw_expr);
     const char *fn_name = IDENTIFIER_POINTER(DECL_NAME(fn));
 
+    const char *color = get_subexpr_color(params);
+
     // use the expresion type for the format, not function result type!
-    int n = snprintf(buf, sizeof(buf), "  %s = %s(", get_format_for_expr(expr), fn_name);
+    int n = snprintf(buf, sizeof(buf), "  %s%s = %s(", color ?: "", get_format_for_expr(expr), fn_name);
 
     // parameters to the sprintf call, first is the return value - expr itself.
     tree call_params = tree_cons(NULL_TREE, expr, NULL_TREE);
@@ -488,27 +526,32 @@ static void make_call_subexpression_repr(tree expr, tree raw_expr, tree *stmts, 
         *argp = save_expr(*argp); // it will be evaluated twice, save it.
 
         // recursively, for my arguments
-        make_subexpressions_repr(*argp, stmts, params);
+        const char *subexpr_color = make_subexpressions_repr(*argp, stmts, params);
 
-        n += snprintf(buf + n, sizeof(buf) - n, "%s, ", get_format_for_expr(*argp));
+        n += snprintf(buf + n, sizeof(buf) - n, "%s%s%s, ",
+            subexpr_color ?: "", get_format_for_expr(*argp), color ?: (subexpr_color ? RESET_COLOR : ""));
         chainon(call_params, tree_cons(NULL_TREE, *argp, NULL_TREE));
     }
 
     n -= 2; // (remove last ", ")
-    n += snprintf(buf + n, sizeof(buf) - n, ")\n");
+    n += snprintf(buf + n, sizeof(buf) - n, ")%s\n", color ? RESET_COLOR : "");
 
     append_to_statement_list(make_repr_sprintf(params->here, params->call_buf_param, params->call_buf_pos,
         buf, call_params), stmts);
+
+    return color;
 }
 
-static void make_subexpressions_repr(tree expr, tree *stmts, struct make_repr_params *params) {
+static const char *make_subexpressions_repr(tree expr, tree *stmts, struct make_repr_params *params) {
     tree inner = strip_nop(from_save_maybe(expr));
 
     if (DECL_P(inner)) {
-        append_decl_subexpression_repr(expr, inner, params->repr_exprs);
+        return append_decl_subexpression_repr(expr, inner, params);
     } else if (TREE_CODE(inner) == CALL_EXPR) {
-        make_call_subexpression_repr(expr, inner, stmts, params);
+        return make_call_subexpression_repr(expr, inner, stmts, params);
     }
+
+    return NULL;
 }
 
 // this function is the core logic: it recursively generates a conditional expressions that walks
@@ -581,15 +624,19 @@ static tree make_conditional_expr_repr(struct make_repr_params *params, tree exp
             }
 
             char format[64];
-            sprintf(format, " %s ", op);
+            (void)snprintf(format, sizeof(format), " %s ", op);
 
             append_to_statement_list(make_conditional_expr_repr(params, TREE_OPERAND(raw_expr, 0)), &stmts);
             append_to_statement_list(make_repr_sprintf(here, buf_param, buf_pos, format, NULL_TREE), &stmts);
             append_to_statement_list(make_conditional_expr_repr(params, TREE_OPERAND(raw_expr, 1)), &stmts);
         } else {
-            make_subexpressions_repr(expr, &stmts, params);
+            const char *subexpr_color = make_subexpressions_repr(expr, &stmts, params);
 
-            append_to_statement_list(make_repr_sprintf(here, buf_param, buf_pos, get_format_for_expr(expr),
+            char format[64];
+            (void)snprintf(format, sizeof(format), "%s%s%s",
+                subexpr_color ?: "", get_format_for_expr(expr), subexpr_color ? RESET_COLOR :"");
+
+            append_to_statement_list(make_repr_sprintf(here, buf_param, buf_pos, format,
                 tree_cons(NULL_TREE, expr, NULL_TREE)), &stmts);
         }
 
@@ -660,6 +707,7 @@ static tree make_assert_failed_body(location_t here, tree cond_expr) {
         .call_buf_param = call_buf_param,
         .call_buf_pos = call_buf_pos,
         .repr_exprs = &repr_exprs,
+        .color_idx = 0,
     };
     append_to_statement_list(make_conditional_expr_repr(&params, COND_EXPR_COND(cond_expr)), &stmts);
 
