@@ -307,6 +307,78 @@ static const char *get_format_for_expr(tree expr) {
     gcc_unreachable();
 }
 
+static char *_make_assert_expr_printf_from_ast(tree expr) {
+    char buf[1024];
+
+    const char *op = get_expr_op_repr(expr);
+    if (op) {
+        char *left = _make_assert_expr_printf_from_ast(TREE_OPERAND(expr, 0));
+        char *right = _make_assert_expr_printf_from_ast(TREE_OPERAND(expr, 1));
+
+        bool parentheses = 0 == strcmp(op, "&&") || 0 == strcmp(op, "||");
+        const char *left_paren = parentheses ? "(" : "";
+        const char *right_paren = parentheses ? ")" : "";
+        (void)snprintf(buf, sizeof(buf), "%s%s%s %s %s%s%s",
+            left_paren, left, right_paren, op, left_paren, right, right_paren);
+
+        free(left);
+        free(right);
+        return xstrdup(buf);
+    } else {
+        tree inner = strip_nop(expr);
+
+        if (DECL_P(inner)) {
+            return xstrdup(IDENTIFIER_POINTER(DECL_NAME(inner)));
+        } else if (TREE_CODE(inner) == CALL_EXPR) {
+            tree fn = get_callee_fndecl(inner);
+            const char *fn_name = IDENTIFIER_POINTER(DECL_NAME(fn));
+
+            int n = snprintf(buf, sizeof(buf), "%s(", fn_name);
+
+            for (int i = 0; i < call_expr_nargs(inner); i++) {
+                tree arg = CALL_EXPR_ARG(inner, i);
+                char *arg_repr = _make_assert_expr_printf_from_ast(arg);
+                n += snprintf(buf + n, sizeof(buf) - n, "%s, ", arg_repr);
+            }
+
+            n -= 2; // (remove last ", ")
+            (void)snprintf(buf + n, sizeof(buf) - n, ")");
+
+            return xstrdup(buf);
+        } else if (is_NULL(expr)) { // before INTEGER_CST, "NULL" is INTEGER_CST itself.
+            return xstrdup("NULL");
+        } else if (TREE_CODE(inner) == INTEGER_CST) {
+            gcc_assert(TREE_INT_CST_NUNITS(inner) == 1); // TODO handle greater
+            (void)snprintf(buf, sizeof(buf), get_format_for_expr(inner), TREE_INT_CST_LOW(inner));
+            return xstrdup(buf);
+        } else if (TREE_CODE(inner) == ADDR_EXPR) {
+            inner = TREE_OPERAND(inner, 0);
+            if (TREE_CODE(inner) == STRING_CST) {
+                // can't use get_format_for_expr() here
+                (void)snprintf(buf, sizeof(buf), "\"%s\"", TREE_STRING_POINTER(inner));
+                return xstrdup(buf);
+            }
+        }
+
+        gcc_unreachable();
+    }
+}
+
+// combination of make_assert_expr_printf and make_conditional_expr_repr:
+// this prints the "expression text" without evaluation anything (like make_assert_expr_printf),
+// but it generates this text from AST (like make_conditional_expr_repr)
+static void make_assert_expr_printf_from_ast(location_t here, tree cond_expr, tree *stmts) {
+    char *expr_text = _make_assert_expr_printf_from_ast(cond_expr);
+
+    char buf[1024];
+    snprintf(buf, sizeof(buf), "A assert(%s)\n", expr_text);
+    free(expr_text);
+
+    append_to_statement_list(my_build_function_call(here, printf_decl,
+            tree_cons(NULL_TREE, build_string_literal(strlen(buf) + 1, buf), NULL_TREE)),
+            stmts);
+}
+
 // can't use GCC's build_tree_list - these lists use TREE_CHAIN to link entries,
 // but we can't override the TREE_CHAIN of existing exprs.
 // so use this lousy list instead
@@ -564,6 +636,9 @@ static tree make_assert_failed_body(location_t here, tree cond_expr) {
     // print "> assert(...)" with the original expression text
     make_assert_expr_printf(here, COND_EXPR_ELSE(cond_expr), &stmts);
 
+    // recreate the repr from AST
+    make_assert_expr_printf_from_ast(here, COND_EXPR_COND(cond_expr), &stmts);
+
     tree buf_param, buf_pos;
     set_up_repr_buf(here, stmts, block, &buf_param, &buf_pos);
 
@@ -587,7 +662,7 @@ static tree make_assert_failed_body(location_t here, tree cond_expr) {
 
     // print the repr buf now
     tree printf_call = my_build_function_call(here, printf_decl,
-        tree_cons(NULL_TREE, build_string_literal_from_literal("  assert(%s)\n"),
+        tree_cons(NULL_TREE, build_string_literal_from_literal("E assert(%s)\n"),
         tree_cons(NULL_TREE, buf_param, NULL_TREE)));
     append_to_statement_list(printf_call, &stmts);
 

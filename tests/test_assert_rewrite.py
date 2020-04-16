@@ -50,7 +50,8 @@ def test_sanity():
     out = run_tester("void test(int n)", "assert(n == 5);", "test(3);")
     assert out == [
         "> assert(n == 5)",
-        "  assert(3 == 5)",
+        "A assert(n == 5)",
+        "E assert(3 == 5)",
         "> subexpressions:",
         "  3 = n",
     ]
@@ -66,7 +67,8 @@ def test_logical_and_expression_right_repr():
                      'test(42, 6);')
     assert out == [
         "> assert(n == 42 && m == 7)",
-        "  assert((...) && (6 == 7))",
+        "A assert((n == 42) && (m == 7))",
+        "E assert((...) && (6 == 7))",
         "> subexpressions:",
         "  42 = n",  # TODO n shouldn't be here - should show variables only if they're relevant.
         "  6 = m",
@@ -81,7 +83,8 @@ def test_logical_or_expression_repr_both():
                      'test(42, 6);')
     assert out == [
         "> assert(n == 43 || m == 7)",
-        "  assert((42 == 43) || (6 == 7))",
+        "A assert((n == 43) || (m == 7))",
+        "E assert((42 == 43) || (6 == 7))",
         "> subexpressions:",
         "  42 = n",
         "  6 = m",
@@ -96,7 +99,8 @@ def test_subexpression_function_call_repr():
                      extra_test="int f(int m, int n) { return m + n; }")
     assert out == [
         "> assert(f(12, n) == 5)",
-        "  assert(32 == 5)",
+        "A assert(f(12, n) == 5)",
+        "E assert(32 == 5)",
         "> subexpressions:",
         "  20 = n",
         "  32 = f(12, 20)",
@@ -106,13 +110,15 @@ def test_subexpression_function_call_repr():
 def test_subexpression_string_repr():
     """
     tests "string pointers" are identified and their repr use %s.
-    also tests that NULL is *not* identified as a string pointer.
+    also tests that NULL is *not* identified as a string pointer, but is identified
+    as NULL in the AST-rebuilt expression.
     """
     out = run_tester("void test(const char *s)", 'assert(strstr("hello world", s) == NULL);',
                      'test("world");', extra_test="#include <string.h>\n")
     assert out == [
         '> assert(strstr("hello world", s) == NULL)',
-        '  assert("world" == (nil))',
+        'A assert(strstr("hello world", s) == NULL)',
+        'E assert("world" == (nil))',
         '> subexpressions:',
         '  "world" = s',
         '  "world" = strstr("hello world", "world")'
@@ -143,7 +149,8 @@ def test_subexpression_evaluated_once():
                      'test(3);', extra_test=extra)
     assert out == [
         "> assert(call_me_once(n) == n)",
-        "  assert(4 == 3)",
+        "A assert(call_me_once(n) == n)",
+        "E assert(4 == 3)",
         "> subexpressions:",
         "  3 = n",
         "  4 = call_me_once(3)",
@@ -169,7 +176,8 @@ def test_subexpression_not_evaluated():
                      'test(42);', extra_test=extra)
     assert out == [
         "> assert(n == 5 && dont_call_me(n) == n)",
-        "  assert(42 == 5)",
+        "A assert((n == 5) && (dont_call_me(n) == n))",
+        "E assert(42 == 5)",
         "> subexpressions:",
         "  42 = n",
     ]
