@@ -460,9 +460,7 @@ static tree make_conditional_expr_repr(struct make_repr_params *params, tree exp
     // * if both pass, we print nothing
     if (code == TRUTH_ANDIF_EXPR || code == TRUTH_AND_EXPR) {
         tree stmts = alloc_stmt_list();
-        append_to_statement_list(make_repr_sprintf(here, buf_param, buf_pos, "(", NULL_TREE), &stmts);
         append_to_statement_list(make_conditional_expr_repr(params, TREE_OPERAND(raw_expr, 0)), &stmts);
-        append_to_statement_list(make_repr_sprintf(here, buf_param, buf_pos, ")", NULL_TREE), &stmts);
 
         tree left_stmts = stmts;
 

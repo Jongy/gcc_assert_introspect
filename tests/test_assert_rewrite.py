@@ -169,7 +169,7 @@ def test_subexpression_not_evaluated():
                      'test(42);', extra_test=extra)
     assert out == [
         "> assert(n == 5 && dont_call_me(n) == n)",
-        "  assert((42 == 5))",  # TODO these extra parentheses should be removed
+        "  assert(42 == 5)",
         "> subexpressions:",
         "  42 = n",
     ]
