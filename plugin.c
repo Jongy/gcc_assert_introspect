@@ -599,7 +599,7 @@ static tree make_conditional_expr_repr(struct make_repr_params *params, tree exp
 
 static bool function_decl_missing_error(location_t here, tree func_decl, const char *name) {
     if (func_decl == NULL_TREE) {
-        error_at(here, PLUGIN_NAME ": plugin requires declaration of '%s'\n", name);
+        error_at(here, PLUGIN_NAME ": plugin requires declaration of '%s', please include relevant header\n", name);
         return true;
     }
 
