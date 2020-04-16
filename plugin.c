@@ -37,6 +37,9 @@
 
 #define PLUGIN_NAME "assert_introspect"
 
+#define BOLD_RED(s) "\x1b[1m\x1b[31m" s "\x1b[0m"
+#define BOLD_BLUE(s) "\x1b[1m\x1b[34m" s "\x1b[0m"
+
 int plugin_is_GPL_compatible; // must be defined for the plugin to run
 
 static tree printf_decl = NULL_TREE;
@@ -371,7 +374,7 @@ static void make_assert_expr_printf_from_ast(location_t here, tree cond_expr, tr
     char *expr_text = _make_assert_expr_printf_from_ast(cond_expr);
 
     char buf[1024];
-    snprintf(buf, sizeof(buf), "A assert(%s)\n", expr_text);
+    snprintf(buf, sizeof(buf), BOLD_BLUE("A") " assert(%s)\n", expr_text);
     free(expr_text);
 
     append_to_statement_list(my_build_function_call(here, printf_decl,
@@ -662,7 +665,7 @@ static tree make_assert_failed_body(location_t here, tree cond_expr) {
 
     // print the repr buf now
     tree printf_call = my_build_function_call(here, printf_decl,
-        tree_cons(NULL_TREE, build_string_literal_from_literal("E assert(%s)\n"),
+        tree_cons(NULL_TREE, build_string_literal_from_literal(BOLD_RED("E") " assert(%s)\n"),
         tree_cons(NULL_TREE, buf_param, NULL_TREE)));
     append_to_statement_list(printf_call, &stmts);
 

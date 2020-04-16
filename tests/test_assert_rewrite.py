@@ -3,6 +3,7 @@ import subprocess
 import shutil
 import signal
 from tempfile import NamedTemporaryFile, mkdtemp
+import re
 import pytest
 
 from conftest import GCC
@@ -12,6 +13,8 @@ ASSERT_INTROSPECT_SO = os.path.abspath(
     os.path.join(os.path.dirname(__file__), "..", "assert_introspect.so"))
 
 HEADERS = "#include <assert.h>\n#include <stdio.h>\n#include <stdlib.h>\n"
+
+ANSI_ESCAPE = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
 
 
 def run_tester(test_prototype, test_code, calling_code, *, extra_test="",
@@ -41,7 +44,7 @@ def run_tester(test_prototype, test_code, calling_code, *, extra_test="",
             output = e.value.output.decode()
             assert e.value.returncode == -signal.SIGABRT.value, "output: " + output
 
-            return output.splitlines()[1 if skip_first else 0:]
+            return ANSI_ESCAPE.sub("", output).splitlines()[1 if skip_first else 0:]
         finally:
             shutil.rmtree(output_dir)
 
