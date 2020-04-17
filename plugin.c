@@ -317,6 +317,66 @@ static char *get_cast_repr(tree expr) {
     return n ? xstrdup(buf) : NULL;
 }
 
+// can't use GCC's build_tree_list - these lists use TREE_CHAIN to link entries,
+// but we can't override the TREE_CHAIN of existing exprs.
+// so use this lousy list instead
+struct expr_list {
+    tree expr;
+    const char *color;
+    struct expr_list *next;
+};
+
+static struct expr_list *get_expr_list_item(tree expr, struct expr_list *list) {
+    gcc_assert(list);
+    list = list->next; // skip dummy
+
+    while (list) {
+        // compare inner expressions - save expressions are generated separately each time
+        // an expression is met in the AST, so if a variable is used multiple times it'll have multiple
+        // SAVE_EXPRs. but still only one DECL. note: it sounds weird, I actually read this comment
+        // after a while and thought it's wrong. it isn't. if an expression (such as a variable decl)
+        // is used multiple times in the AST, those separate instances will have different save_exprs
+        // wrapping them, because the expression is indeed evaluated multiple times. for variables, those
+        // are deemed "equal" here. for others (like function calls) - the CALL_EXPR will be different
+        // if it's really a different call, so we're good.
+        if (from_save_maybe(list->expr) == from_save_maybe(expr)) {
+            return list;
+        }
+
+        list = list->next;
+    }
+
+    return NULL;
+}
+
+static const char *get_subexpr_color(tree expr, struct expr_list *ec) {
+    struct expr_list *list = get_expr_list_item(expr, ec);
+    if (list) {
+        return list->color;
+    }
+
+    return NULL;
+}
+
+static void add_subexpr_color(tree expr, const char *color, struct expr_list *ec) {
+    struct expr_list *new_ec = (struct expr_list*)xmalloc(sizeof(*new_ec));
+    new_ec->expr = expr;
+    new_ec->color = color;
+    // order doesn't really matter in this list.
+    new_ec->next = ec->next;
+    ec->next = new_ec;
+}
+
+static void free_expr_list(struct expr_list *ec) {
+    ec = ec->next; // skip dummy
+
+    while (ec) {
+        struct expr_list *next = ec->next;
+        free(ec);
+        ec = next;
+    }
+}
+
 // NULL, defined as `(void*)0`, is an INTEGER_CST with type as POINTER_TYPE,
 // pointing to "char" with string-flag set. I couldn't find a way to separate those
 // from real string pointers, so this function comes in help.
@@ -371,14 +431,15 @@ static const char *get_format_for_expr(tree expr) {
     gcc_unreachable();
 }
 
-static char *_make_assert_expr_printf_from_ast(tree expr) {
+static char *_make_assert_expr_printf_from_ast(tree expr, struct expr_list *ec) {
     char buf[1024];
 
-    tree inner = strip_nop_and_convert(expr);
+    tree unsaved = from_save_maybe(expr);
+    tree inner = strip_nop_and_convert(unsaved);
     const char *op = get_expr_op_repr(inner);
     if (op) {
-        char *left = _make_assert_expr_printf_from_ast(TREE_OPERAND(inner, 0));
-        char *right = _make_assert_expr_printf_from_ast(TREE_OPERAND(inner, 1));
+        char *left = _make_assert_expr_printf_from_ast(TREE_OPERAND(inner, 0), ec);
+        char *right = _make_assert_expr_printf_from_ast(TREE_OPERAND(inner, 1), ec);
 
         // TODO show casts on binary expressions
         bool parentheses = 0 == strcmp(op, "&&") || 0 == strcmp(op, "||");
@@ -392,27 +453,34 @@ static char *_make_assert_expr_printf_from_ast(tree expr) {
         return xstrdup(buf);
     } else {
         if (DECL_P(inner)) {
-            char *cast = get_cast_repr(expr);
-            (void)snprintf(buf, sizeof(buf), "%s%s", cast ?: "", IDENTIFIER_POINTER(DECL_NAME(inner)));
+            char *cast = get_cast_repr(unsaved);
+            const char *color = get_subexpr_color(expr, ec);
+            (void)snprintf(buf, sizeof(buf), "%s%s%s%s", color ?: "", cast ?: "",
+                IDENTIFIER_POINTER(DECL_NAME(inner)), color ? RESET_COLOR : "");
             free(cast);
             return xstrdup(buf);
         } else if (TREE_CODE(inner) == CALL_EXPR) {
+            // TODO show casts on function calls
             tree fn = get_callee_fndecl(inner);
             const char *fn_name = IDENTIFIER_POINTER(DECL_NAME(fn));
+            const char *color = get_subexpr_color(expr, ec);
 
-            int n = snprintf(buf, sizeof(buf), "%s(", fn_name);
+            int n = snprintf(buf, sizeof(buf), "%s%s(", color ?: "", fn_name);
 
             for (int i = 0; i < call_expr_nargs(inner); i++) {
                 tree arg = CALL_EXPR_ARG(inner, i);
-                char *arg_repr = _make_assert_expr_printf_from_ast(arg);
-                n += snprintf(buf + n, sizeof(buf) - n, "%s, ", arg_repr);
+                char *arg_repr = _make_assert_expr_printf_from_ast(arg, ec);
+                const char *arg_color = get_subexpr_color(arg, ec);
+                n += snprintf(buf + n, sizeof(buf) - n, "%s%s, ", arg_repr,
+                    // reinsert our color if arg itself had one (had a color in its arg_repr)
+                    arg_color ? color : "");
             }
 
             n -= 2; // (remove last ", ")
-            (void)snprintf(buf + n, sizeof(buf) - n, ")");
+            (void)snprintf(buf + n, sizeof(buf) - n, ")%s", color ? RESET_COLOR : "");
 
             return xstrdup(buf);
-        } else if (is_NULL(expr)) { // before INTEGER_CST, "NULL" is INTEGER_CST itself.
+        } else if (is_NULL(unsaved)) { // before INTEGER_CST, "NULL" is INTEGER_CST itself.
             return xstrdup("NULL");
         } else if (TREE_CODE(inner) == INTEGER_CST) {
             gcc_assert(TREE_INT_CST_NUNITS(inner) == 1); // TODO handle greater
@@ -439,8 +507,8 @@ static char *_make_assert_expr_printf_from_ast(tree expr) {
 // combination of make_assert_expr_printf and make_conditional_expr_repr:
 // this prints the "expression text" without evaluation anything (like make_assert_expr_printf),
 // but it generates this text from AST (like make_conditional_expr_repr)
-static void make_assert_expr_printf_from_ast(location_t here, tree cond_expr, tree *stmts) {
-    char *expr_text = _make_assert_expr_printf_from_ast(cond_expr);
+static void make_assert_expr_printf_from_ast(location_t here, tree cond_expr, struct expr_list *ec, tree *stmts) {
+    char *expr_text = _make_assert_expr_printf_from_ast(cond_expr, ec);
 
     char buf[1024];
     snprintf(buf, sizeof(buf), BOLD_BLUE("A") " assert(%s)\n", expr_text);
@@ -471,12 +539,13 @@ struct make_repr_params {
     tree buf_pos;
     tree call_buf_param;
     tree call_buf_pos;
-    struct expr_list *repr_exprs;
     size_t color_idx;
+    struct expr_list decl_repr_exprs;
+    struct expr_list subexpr_colors;
 };
 
 // returns next usable color by subexpr reprs.
-static const char *get_subexpr_color(struct make_repr_params *params) {
+static const char *alloc_subexpr_color(struct make_repr_params *params) {
     if (params->color_idx < ARRAY_SIZE(SUBEXPR_COLORS)) {
         return SUBEXPR_COLORS[params->color_idx++];
     }
@@ -484,37 +553,28 @@ static const char *get_subexpr_color(struct make_repr_params *params) {
     return NULL;
 }
 
-// can't use GCC's build_tree_list - these lists use TREE_CHAIN to link entries,
-// but we can't override the TREE_CHAIN of existing exprs.
-// so use this lousy list instead
-struct expr_list {
-    tree expr;
-    const char *color;
-    struct expr_list *next;
-};
-
 static const char *append_decl_subexpression_repr(tree expr, tree raw_expr, struct make_repr_params *params) {
     gcc_assert(DECL_P(raw_expr));
 
-    // iterate existing statements, don't add same expression again
-    struct expr_list *list = params->repr_exprs;
-
-    // we skip the first, it's a dummy entry
-    while (list->next) {
-        // compare inner expressions - save expressions are generated separately each time
-        // an expression is met, so if a variable is used multiple times it'll have multiple
-        // SAVE_EXPRs. but still only one DECL.
-        if (from_save_maybe(list->next->expr) == from_save_maybe(expr)) {
-            return list->next->color;
-        }
-
-        list = list->next;
+    // don't add if found
+    struct expr_list *list = get_expr_list_item(expr, &params->decl_repr_exprs);
+    if (list) {
+        return list->color;
     }
 
     struct expr_list *new_list = (struct expr_list *)xmalloc(sizeof(*new_list));
     new_list->expr = expr;
     new_list->next = NULL;
-    new_list->color = get_subexpr_color(params);
+    new_list->color = alloc_subexpr_color(params);
+    if (new_list->color) {
+        add_subexpr_color(expr, new_list->color, &params->subexpr_colors);
+    }
+
+    // add it last - so order is kept.
+    list = &params->decl_repr_exprs;
+    while (list->next) {
+        list = list->next;
+    }
     list->next = new_list;
 
     return new_list->color;
@@ -577,7 +637,10 @@ static const char *make_call_subexpression_repr(tree expr, tree raw_expr, tree *
     tree fn = get_callee_fndecl(raw_expr);
     const char *fn_name = IDENTIFIER_POINTER(DECL_NAME(fn));
 
-    const char *color = get_subexpr_color(params);
+    const char *color = alloc_subexpr_color(params);
+    if (color) {
+        add_subexpr_color(expr, color, &params->subexpr_colors);
+    }
 
     // use the expresion type for the format, not function result type!
     int n = snprintf(buf, sizeof(buf), "  %s%s = %s(", color ?: "", get_format_for_expr(expr), fn_name);
@@ -747,13 +810,11 @@ static tree make_assert_failed_body(location_t here, tree cond_expr) {
     }
 
     tree stmts = alloc_stmt_list();
+    tree first_stmts = alloc_stmt_list();
     tree block = make_node(BLOCK);
 
     // print "> assert(...)" with the original expression text
-    make_assert_expr_printf(here, COND_EXPR_ELSE(cond_expr), &stmts);
-
-    // recreate the repr from AST
-    make_assert_expr_printf_from_ast(here, COND_EXPR_COND(cond_expr), &stmts);
+    make_assert_expr_printf(here, COND_EXPR_ELSE(cond_expr), &first_stmts);
 
     tree buf_param, buf_pos;
     set_up_repr_buf(here, stmts, block, &buf_param, &buf_pos);
@@ -765,15 +826,15 @@ static tree make_assert_failed_body(location_t here, tree cond_expr) {
     wrap_in_save_expr(&COND_EXPR_COND(cond_expr));
 
     // write the expression repr itself
-    struct expr_list repr_exprs = {0};
     struct make_repr_params params = {
         .here = here,
         .buf_param = buf_param,
         .buf_pos = buf_pos,
         .call_buf_param = call_buf_param,
         .call_buf_pos = call_buf_pos,
-        .repr_exprs = &repr_exprs,
         .color_idx = 0,
+        .decl_repr_exprs = {0},
+        .subexpr_colors = {0},
     };
     append_to_statement_list(make_conditional_expr_repr(&params, COND_EXPR_COND(cond_expr)), &stmts);
 
@@ -788,7 +849,11 @@ static tree make_assert_failed_body(location_t here, tree cond_expr) {
         &stmts);
 
     // add DECLs subexpressions repr
-    make_decl_subexpressions_repr(here, &repr_exprs, &stmts);
+    make_decl_subexpressions_repr(here, &params.decl_repr_exprs, &stmts);
+
+    // recreate the repr from AST
+    make_assert_expr_printf_from_ast(here, COND_EXPR_COND(cond_expr), &params.subexpr_colors, &first_stmts);
+    free_expr_list(&params.subexpr_colors);
 
     // print call buf repr
     printf_call = my_build_function_call(here, printf_decl,
@@ -800,7 +865,10 @@ static tree make_assert_failed_body(location_t here, tree cond_expr) {
     tree abort_call = my_build_function_call(here, abort_decl, NULL_TREE);
     append_to_statement_list(abort_call, &stmts);
 
-    return c_build_bind_expr(here, block, stmts);
+    // concat the 2 lists
+    append_to_statement_list(stmts, &first_stmts);
+
+    return c_build_bind_expr(here, block, first_stmts);
 }
 
 // cond_expr is an expression that matched is_assert_fail_cond_expr().

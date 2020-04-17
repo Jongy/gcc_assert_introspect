@@ -32,9 +32,9 @@ def run_tester(test_prototype, test_code, calling_code, *, extra_test="",
                                              "-fplugin={}".format(ASSERT_INTROSPECT_SO),
                                              "-c", test.name, "-o", obj.name] + extra_opts,
                                              stderr=subprocess.PIPE)
-            assert not compile_error
+            assert not compile_error, "compilation should have failed!\n"
         except subprocess.CalledProcessError as e:
-            assert compile_error
+            assert compile_error, "compilation failed unexpectedly!\n" + e.stderr.decode()
             return e.stderr.decode()
         else:
             lines = output.decode().splitlines()
@@ -230,7 +230,8 @@ def test_subexpression_colors():
 
     assert out == [
         "> assert(n == 5 || (short)n == 6 || func5(n) == n)",
-        colored("A", "blue", attrs=["bold"]) + " assert(((n == 5) || ((short int)n == 6)) || (func5(n) == n))",
+        colored("A", "blue", attrs=["bold"]) + f" assert((({bg('n')} == 5) || ({by('(short int)n')} == 6)) || "
+            f"({bm('func5(').rstrip(RESET) + bg('n') + bm(')')} == {bg('n')}))",
         colored("E", "red", attrs=["bold"]) + f" assert((({bg('42')} == 5) || ({by('42')} == 6)) || ({bm('7')} == {bg('42')}))",
         "> subexpressions:",
         f"  {bg('42 = n')}",
