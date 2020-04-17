@@ -110,7 +110,6 @@ can use it to verify your local GCC is okay with the plugin.
 TODOs
 -----
 
-* Point at the specific subexpression that failed.
 * Relate subexpression strings to values. We already relate variables and results of function calls,
   others might be useful as well (for example, results of arithmetics?)
 * Get rid of redundant parenthesis.
