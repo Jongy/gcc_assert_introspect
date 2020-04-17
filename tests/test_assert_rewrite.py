@@ -302,3 +302,19 @@ def test_binary_expression_casts_skipped():
         "  x = 5",
         "  n = 5",
     ]
+
+
+def test_ast_repr_addressof():
+    """
+    tests the printing of &variable
+    """
+    out = run_tester("void test(int n)", 'assert(!func5(&n));', 'test(5);',
+                     extra_test="int func5(int *n) { return *n + 5; }", strip_colors=False)
+    assert out[:-1] == [
+        "> assert(!func5(&n))",
+        f"{bb('A')} assert({bg('func5(&n)')} == 0)",
+        f"{br('E')} assert({bg('10')} == 0)",
+        "> subexpressions:",
+    ]
+    # it's a real hassle to test a regex with colors
+    assert re.match(r"  func5\(0x[a-f0-9]+\) = 10", ANSI_ESCAPE.sub("", out[-1]))
