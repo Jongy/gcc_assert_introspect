@@ -306,9 +306,13 @@ static const char *get_format_for_expr(tree expr) {
         } else {
             return "%p";
         }
-    } else if INTEGRAL_TYPE_P(type) {
-        const char *type_name = IDENTIFIER_POINTER(TYPE_IDENTIFIER(type));
+    } else if (INTEGRAL_TYPE_P(type)) {
+        if (TYPE_IDENTIFIER(type) == NULL_TREE) {
+            // default int? :o
+            return TYPE_UNSIGNED(type) ? "%u" : "%d";
+        }
 
+        const char *type_name = IDENTIFIER_POINTER(TYPE_IDENTIFIER(type));
         if (0 == strcmp(type_name, "int")) {
             return "%d";
         } else if (0 == strcmp(type_name, "unsigned int")) {
