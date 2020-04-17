@@ -19,7 +19,7 @@ ANSI_ESCAPE = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
 
 
 def run_tester(test_prototype, test_code, calling_code, *, extra_test="",
-               skip_first=True, strip_colors=True):
+               skip_first=True, strip_colors=True, compile_error=False):
     with NamedTemporaryFile("w", suffix=".c") as test, \
          NamedTemporaryFile("w", suffix=".c") as caller, \
          NamedTemporaryFile(suffix=".o") as obj:
@@ -27,9 +27,18 @@ def run_tester(test_prototype, test_code, calling_code, *, extra_test="",
         test.write(HEADERS + extra_test + "{0} {{ {1} }}".format(test_prototype, test_code))
         test.flush()
         extra_opts = ["-Werror", "-Wall", ]
-        subprocess.check_call([GCC,
-                               "-fplugin={}".format(ASSERT_INTROSPECT_SO),
-                               "-c", test.name, "-o", obj.name] + extra_opts)
+        try:
+            output = subprocess.check_output([GCC,
+                                             "-fplugin={}".format(ASSERT_INTROSPECT_SO),
+                                             "-c", test.name, "-o", obj.name] + extra_opts,
+                                             stderr=subprocess.PIPE)
+            assert not compile_error
+        except subprocess.CalledProcessError as e:
+            assert compile_error
+            return e.stderr.decode()
+        else:
+            lines = output.decode().splitlines()
+            assert len(lines) == 1 and lines[0].startswith("assert_introspect loaded")
 
         caller.write(HEADERS + "{0}; int main(void) {{ setlinebuf(stdout); {1}; return 0; }}"
             .format(test_prototype, calling_code))
@@ -251,3 +260,12 @@ def test_ast_double_cast():
         "  5 = (int)x",
         "  5 = (int)(short int)n",
     ]
+
+
+def test_error_in_expression():
+    """
+    if there's an error inside the assert expression, the plugin should identify it and refuse to
+    rewrite.
+    """
+    out = run_tester("void test(int n)", 'assert(n == m);', 'test(5);', compile_error=True)
+    assert "error: assert_introspect: previous error in expression, not rewriting assert" in out

@@ -800,8 +800,6 @@ static tree make_assert_failed_body(location_t here, tree cond_expr) {
 // cond_expr is an expression that matched is_assert_fail_cond_expr().
 // this function returns a new expression that'll be used to replace it.
 static tree patch_assert(tree cond_expr) {
-    gcc_assert(TREE_CODE(cond_expr) == COND_EXPR);
-
     location_t here = EXPR_LOCATION(cond_expr);
 
     tree bind = make_assert_failed_body(here, cond_expr);
@@ -836,7 +834,15 @@ static void iterate_function_body(tree expr) {
         // see the docs of is_assert_fail_cond_expr().
         if (is_assert_fail_cond_expr(body)) {
             gcc_assert(TREE_CODE(expr) == BIND_EXPR);
-            BIND_EXPR_BODY(expr) = patch_assert(body);
+            gcc_assert(TREE_CODE(body) == COND_EXPR);
+
+            // as far as I understand it, if there's any error inside COND_EXPR_COND,
+            // the entire expression will be marked as error.
+            if (!error_operand_p((COND_EXPR_COND(body)))) {
+                BIND_EXPR_BODY(expr) = patch_assert(body);
+            } else {
+                error_at(EXPR_LOCATION(body), PLUGIN_NAME ": previous error in expression, not rewriting assert\n");
+            }
         }
     }
 }
