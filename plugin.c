@@ -397,8 +397,8 @@ static void make_assert_expr_printf_from_ast(location_t here, tree cond_expr, tr
     free(expr_text);
 
     append_to_statement_list(my_build_function_call(here, printf_decl,
-            tree_cons(NULL_TREE, build_string_literal_here(here, strlen(buf) + 1, buf), NULL_TREE)),
-            stmts);
+        tree_cons(NULL_TREE, build_string_literal_here(here, strlen(buf) + 1, buf), NULL_TREE)),
+        stmts);
 }
 
 static const char *SUBEXPR_COLORS[] = {
