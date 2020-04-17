@@ -7,7 +7,7 @@ import re
 from termcolor import colored, RESET
 import pytest
 
-from conftest import GCC
+from conftest import GCC, OUTPUT_FILE
 
 
 ASSERT_INTROSPECT_SO = os.path.abspath(
@@ -53,6 +53,8 @@ def run_tester(test_prototype, test_code, calling_code, *, extra_test="",
 
             output = e.value.output.decode()
             assert e.value.returncode == -signal.SIGABRT.value, "output: " + output
+
+            OUTPUT_FILE.write(output + "------------\n")
 
             if strip_colors:
                 output = ANSI_ESCAPE.sub("", output)
