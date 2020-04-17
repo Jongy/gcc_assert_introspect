@@ -98,7 +98,13 @@ static bool is_assert_fail_cond_expr(tree expr) {
 }
 
 // lol
-#define build_string_literal_from_literal(s) build_string_literal(sizeof(s), s)
+#define build_string_literal_from_literal(here, s) build_string_literal_here((here), sizeof(s), (s))
+
+static tree build_string_literal_here(location_t here, int len, const char *str) {
+    tree t = build_string_literal(len, str);
+    SET_EXPR_LOCATION(t, here);
+    return t;
+}
 
 static inline tree _build_conditional_expr(location_t colon_loc, tree ifexp,
     tree op1, tree op1_original_type, tree op2, tree op2_original_type) {
@@ -187,12 +193,12 @@ static void make_assert_expr_printf(location_t here, tree call__assert_fail, tre
     (void)snprintf(buf, sizeof(buf), "In %s:%ld, function '%%s':\n",
         TREE_STRING_POINTER(file_arg), TREE_INT_CST_LOW(line_arg));
 
-    tree header_line = build_string_literal(strlen(buf) + 1, buf);
+    tree header_line = build_string_literal_here(here, strlen(buf) + 1, buf);
     append_to_statement_list(my_build_function_call(here, printf_decl,
         tree_cons(NULL_TREE, header_line,
         tree_cons(NULL_TREE, function_arg, NULL_TREE))), stmts);
 
-    tree format_str = build_string_literal_from_literal("> assert(%s)\n");
+    tree format_str = build_string_literal_from_literal(here, "> assert(%s)\n");
     append_to_statement_list(my_build_function_call(here, printf_decl,
         tree_cons(NULL_TREE, format_str,
         // can just use the original argument directly in our call..
@@ -387,7 +393,7 @@ static void make_assert_expr_printf_from_ast(location_t here, tree cond_expr, tr
     free(expr_text);
 
     append_to_statement_list(my_build_function_call(here, printf_decl,
-            tree_cons(NULL_TREE, build_string_literal(strlen(buf) + 1, buf), NULL_TREE)),
+            tree_cons(NULL_TREE, build_string_literal_here(here, strlen(buf) + 1, buf), NULL_TREE)),
             stmts);
 }
 
@@ -472,7 +478,7 @@ static void make_decl_subexpressions_repr(location_t here, struct expr_list *lis
             IDENTIFIER_POINTER(DECL_NAME(raw_expr)), list->color ? RESET_COLOR : "");
 
         tree printf_call = my_build_function_call(here, printf_decl,
-            tree_cons(NULL_TREE, build_string_literal(strlen(buf) + 1, buf),
+            tree_cons(NULL_TREE, build_string_literal_here(here, strlen(buf) + 1, buf),
             tree_cons(NULL_TREE, expr, NULL_TREE)));
 
         append_to_statement_list(printf_call, stmts);
@@ -491,7 +497,7 @@ static tree make_buf_ref_addr(location_t here, tree buf_param, tree buf_pos) {
 static tree make_repr_sprintf(location_t here, tree buf_param, tree buf_pos, const char *format, tree args) {
     tree sprintf_call = my_build_function_call(here, sprintf_decl,
             tree_cons(NULL_TREE, make_buf_ref_addr(here, buf_param, buf_pos),
-            tree_cons(NULL_TREE, build_string_literal(strlen(format) + 1, format), args)));
+            tree_cons(NULL_TREE, build_string_literal_here(here, strlen(format) + 1, format), args)));
 
     // save_expr on sprintf_call required to avoid crashing on GCC 7.5.0, see commit message
     return build_modify_expr(here, buf_pos, NULL_TREE, PLUS_EXPR, here, save_expr(sprintf_call), NULL_TREE);
@@ -713,12 +719,12 @@ static tree make_assert_failed_body(location_t here, tree cond_expr) {
 
     // print the repr buf now
     tree printf_call = my_build_function_call(here, printf_decl,
-        tree_cons(NULL_TREE, build_string_literal_from_literal(BOLD_RED("E") " assert(%s)\n"),
+        tree_cons(NULL_TREE, build_string_literal_from_literal(here, BOLD_RED("E") " assert(%s)\n"),
         tree_cons(NULL_TREE, buf_param, NULL_TREE)));
     append_to_statement_list(printf_call, &stmts);
 
     append_to_statement_list(my_build_function_call(here, printf_decl,
-        tree_cons(NULL_TREE, build_string_literal_from_literal("> subexpressions:\n"), NULL_TREE)),
+        tree_cons(NULL_TREE, build_string_literal_from_literal(here, "> subexpressions:\n"), NULL_TREE)),
         &stmts);
 
     // add DECLs subexpressions repr
@@ -726,7 +732,7 @@ static tree make_assert_failed_body(location_t here, tree cond_expr) {
 
     // print call buf repr
     printf_call = my_build_function_call(here, printf_decl,
-        tree_cons(NULL_TREE, build_string_literal_from_literal("%s"),
+        tree_cons(NULL_TREE, build_string_literal_from_literal(here, "%s"),
         tree_cons(NULL_TREE, call_buf_param, NULL_TREE)));
     append_to_statement_list(printf_call, &stmts);
 
