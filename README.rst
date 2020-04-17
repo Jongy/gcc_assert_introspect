@@ -118,5 +118,6 @@ TODOs
 * Make it generic - not tied to glibc's ``assert``.
 * Subtraction of consts is represented by ``PLUS_EXPR`` with a negative ``INTEGER_CST``, handle
   it nicely.
+* Casts are displayed on variables, but not on function calls / binary expression results.
 
 See the plugin code for more information.

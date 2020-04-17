@@ -269,3 +269,25 @@ def test_error_in_expression():
     """
     out = run_tester("void test(int n)", 'assert(n == m);', 'test(5);', compile_error=True)
     assert "error: assert_introspect: previous error in expression, not rewriting assert" in out
+
+
+def test_binary_expression_casts_skipped():
+    """
+    tests that casts on binary expressions are bypassed. for example:
+
+        int x = 5, y = 7;
+        unsigned long n = x;
+        assert(n == x + y);
+
+    in this case, the PLUS_EXR 'x + y' is wrapped in a NOP_EXPR to cast it to "long unsigned int".
+    make sure the plugin identifies it and sees ahead.
+    """
+    out = run_tester("void test(int n)", 'unsigned long x = n; assert(x + 8 == n + 2);', 'test(5);')
+    assert out == [
+        "> assert(x + 8 == n + 2)",
+        "A assert(x + 8 == n + 2)",
+        "E assert(5 + 8 == 5 + 2)",
+        "> subexpressions:",
+        "  5 = x",
+        "  5 = n",
+    ]

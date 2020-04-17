@@ -149,14 +149,33 @@ static const char *get_expr_op_repr(tree expr) {
     return op;
 }
 
+// different from tree_strip_nop_conversions and its friends - this strips away all NOPs.
+// it's invalid to use the *value* of the inner expression, because those NOPs may express
+// real casts.
+// it's used to check the inner type & access its other fields.
+static tree strip_nop_and_convert(tree expr) {
+    if (TREE_CODE(expr) == NOP_EXPR) {
+        expr = TREE_OPERAND(expr, 0);
+    }
+    if (CONVERT_EXPR_P(expr)) { // CONVERT_EXPR may follow
+        expr = TREE_OPERAND(expr, 0);
+    }
+
+    return expr;
+}
+
 static void wrap_in_save_expr(tree *expr) {
     // use get_expr_op_repr as a predicate: "is it a binary expression with 2 args"
     // TODO this probably doesn't catch all cases + doesn't catch unary ops (whose inner value
     // should be made a SAVE_EXPR as well)
-    if (get_expr_op_repr(*expr) != NULL) {
-        wrap_in_save_expr(&TREE_OPERAND(*expr, 0));
-        wrap_in_save_expr(&TREE_OPERAND(*expr, 1));
+
+    // strip leading cast, for example promotion.
+    tree inner = strip_nop_and_convert(*expr);
+    if (get_expr_op_repr((inner)) != NULL) {
+        wrap_in_save_expr(&TREE_OPERAND(inner, 0));
+        wrap_in_save_expr(&TREE_OPERAND(inner, 1));
     }
+    // however, expression with the cast is the one we save.
     *expr = save_expr(*expr);
 }
 
@@ -267,21 +286,6 @@ static tree from_save_maybe(tree expr) {
 
 static void assert_tree_is_save(tree expr) {
     gcc_assert(TREE_CODE(expr) == SAVE_EXPR || is_save_equivalent(expr));
-}
-
-// different from tree_strip_nop_conversions and its friends - this strips away all NOPs.
-// it's invalid to use the *value* of the inner expression, because those NOPs may express
-// real casts.
-// it's used to check the inner type & access its other fields.
-static tree strip_nop_and_convert(tree expr) {
-    if (TREE_CODE(expr) == NOP_EXPR) {
-        expr = TREE_OPERAND(expr, 0);
-    }
-    if (CONVERT_EXPR_P(expr)) { // CONVERT_EXPR may follow
-        expr = TREE_OPERAND(expr, 0);
-    }
-
-    return expr;
 }
 
 static const char *get_int_type_name(tree expr) {
@@ -675,7 +679,8 @@ static tree make_conditional_expr_repr(struct make_repr_params *params, tree exp
     else {
         tree stmts = alloc_stmt_list();
 
-        const char *op = get_expr_op_repr(raw_expr);
+        tree inner = strip_nop_and_convert(raw_expr);
+        const char *op = get_expr_op_repr(inner);
 
         if (op != NULL) {
             // TODO handle escaping more nicely :/
@@ -683,12 +688,13 @@ static tree make_conditional_expr_repr(struct make_repr_params *params, tree exp
                 op = "%%"; // escape for the sprintf emitted here
             }
 
+            // TODO: if inner != raw_expr then we had a cast here, display it.
             char format[64];
             (void)snprintf(format, sizeof(format), " %s ", op);
 
-            append_to_statement_list(make_conditional_expr_repr(params, TREE_OPERAND(raw_expr, 0)), &stmts);
+            append_to_statement_list(make_conditional_expr_repr(params, TREE_OPERAND(inner, 0)), &stmts);
             append_to_statement_list(make_repr_sprintf(here, buf_param, buf_pos, format, NULL_TREE), &stmts);
-            append_to_statement_list(make_conditional_expr_repr(params, TREE_OPERAND(raw_expr, 1)), &stmts);
+            append_to_statement_list(make_conditional_expr_repr(params, TREE_OPERAND(inner, 1)), &stmts);
         } else {
             const char *subexpr_color = make_subexpressions_repr(expr, &stmts, params);
 
