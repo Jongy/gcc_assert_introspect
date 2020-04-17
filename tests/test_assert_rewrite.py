@@ -62,6 +62,19 @@ def run_tester(test_prototype, test_code, calling_code, *, extra_test="",
             shutil.rmtree(output_dir)
 
 
+# short names so colored expressions don't get too long.
+br = lambda s: colored(s, "red", attrs=["bold"])
+bb = lambda s: colored(s, "blue", attrs=["bold"])
+bg = lambda s: colored(s, "green", attrs=["bold"])
+bgr = lambda s: bg(s)[:-len(RESET)]
+by = lambda s: colored(s, "yellow", attrs=["bold"])
+byr = lambda s: by(s)[:-len(RESET)]
+bm = lambda s: colored(s, "magenta", attrs=["bold"])
+bmr = lambda s: bm(s)[:-len(RESET)]
+bc = lambda s: colored(s, "cyan", attrs=["bold"])
+bcr = lambda s: bc(s)[:-len(RESET)]
+
+
 def test_sanity():
     out = run_tester("void test(int n)", "assert(n == 5);", "test(3);")
     assert out == [
@@ -109,17 +122,23 @@ def test_logical_or_expression_repr_both():
 
 def test_subexpression_function_call_repr():
     """
-    tests the generated function call repr
+    tests the generated function call repr.
+    1. functions with 0, 1, 2 arguments
+    2. function calls inside function calls
     """
-    out = run_tester("void test(int n)", "assert(f(12, n) == 5);", "test(20);",
-                     extra_test="int f(int m, int n) { return m + n; }")
+    out = run_tester("void test(int n)", "assert(f2(f1(f0()), n) == 5);", "test(20);",
+                     extra_test="int f2(int m, int n) { return m + n; }\n"
+                                "int f1(int n) { return n - 1; }\n"
+                                "int f0(void) { return 5; }", strip_colors=False)
     assert out == [
-        "> assert(f(12, n) == 5)",
-        "A assert(f(12, n) == 5)",
-        "E assert(32 == 5)",
+        "> assert(f2(f1(f0()), n) == 5)",
+        f"{bb('A')} assert({bgr('f2(') + byr('f1(') + bm('f0()') + by(')') + bgr(', ') + bc('n') + bg(')')} == 5)",
+        f"{br('E')} assert({bg('24')} == 5)",
         "> subexpressions:",
-        "  n = 20",
-        "  f(12, 20) = 32",
+        f"  {bc('n = 20')}",
+        f"  {bm('f0() = 5')}",
+        f"  {byr('f1(') + bmr('5') + by(') = 4')}",
+        f"  {bgr('f2(') + byr('4') + bgr(', ') + bcr('20') + bg(') = 24')}",
     ]
 
 
@@ -219,26 +238,17 @@ def test_subexpression_colors():
     out = run_tester("void test(int n)", 'assert(n == 5 || (short)n == 6 || func5(n) == n);',
                      'test(42);', extra_test=extra, strip_colors=False)
 
-    def bg(s):
-        return colored(s, "green", attrs=["bold"])
-
-    def by(s):
-        return colored(s, "yellow", attrs=["bold"])
-
-    def bm(s):
-        return colored(s, "magenta", attrs=["bold"])
-
     assert out == [
         "> assert(n == 5 || (short)n == 6 || func5(n) == n)",
-        colored("A", "blue", attrs=["bold"]) + f" assert((({bg('n')} == 5) || ({by('(short int)n')} == 6)) || "
-            f"({bm('func5(').rstrip(RESET) + bg('n') + bm(')')} == {bg('n')}))",
-        colored("E", "red", attrs=["bold"]) + f" assert((({bg('42')} == 5) || ({by('42')} == 6)) || ({bm('7')} == {bg('42')}))",
+        f"{bb('A')} assert((({bg('n')} == 5) || ({by('(short int)n')} == 6)) || "
+            f"({bmr('func5(') + bg('n') + bm(')')} == {bg('n')}))",
+        f"{br('E')} assert((({bg('42')} == 5) || ({by('42')} == 6)) || ({bm('7')} == {bg('42')}))",
         "> subexpressions:",
         f"  {bg('n = 42')}",
         f"  {by('(short int)n = 42')}",
         # necessary to stirp the RESET because the plugin doesn't emit those if it knows
         # the next part is colored anyway.
-        f"  {bm('func5(').rstrip(RESET) + bg('42').rstrip(RESET) + bm(') = 7')}",
+        f"  {bmr('func5(') + bgr('42') + bm(') = 7')}",
     ]
 
 

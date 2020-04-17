@@ -476,7 +476,7 @@ static char *_make_assert_expr_printf_from_ast(tree expr, struct expr_list *ec) 
                     arg_color ? color : "");
             }
 
-            n -= 2; // (remove last ", ")
+            n -= call_expr_nargs(inner) ? 2 : 0; // (remove last ", " if we had any)
             (void)snprintf(buf + n, sizeof(buf) - n, ")%s", color ? RESET_COLOR : "");
 
             return xstrdup(buf);
@@ -662,7 +662,7 @@ static const char *make_call_subexpression_repr(tree expr, tree raw_expr, tree *
 
     call_params = chainon(call_params, tree_cons(NULL_TREE, expr, NULL_TREE)); //  last is the return value - expr itself.
 
-    n -= 2; // (remove last ", ")
+    n -= call_expr_nargs(raw_expr) ? 2 : 0; // (remove last ", " if we had any)
     n += snprintf(buf + n, sizeof(buf) - n, ") = %s%s\n", get_format_for_expr(expr), color ? RESET_COLOR : "");
 
     append_to_statement_list(make_repr_sprintf(params->here, params->call_buf_param, params->call_buf_pos,
