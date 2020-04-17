@@ -1,8 +1,12 @@
 Assert Introspection
 ====================
 
-(WIP) GCC plugin that creates ``pytest``-like assert introspection for C (and possibly C++),
-without any code modifications required.
+(WIP) GCC plugin that rewrites ``assert`` s to provide introspection about the inner expressions,
+for C (and possibly C++). No any code changes required!
+
+Originally, concepts were take from how ``pytest`` does it, but later on I took my way.
+
+*This was developed & tested with GCC 9.2.0 / 9.1.0 / 7.5.0*
 
 TL;DR
 -----
@@ -11,19 +15,29 @@ When ``assert(1 != n && n != 6)`` fails, you get this print before aborting::
 
     In file myfile.c:42, function 'test_function':
     > assert(1 != n && n != 6)
-      assert((...) && 6 != 6)
+    A assert((n != 1) && (n != 6))
+    E assert((...) && (6 != 6))
     > subexpressions:
-      6 = n
+      n = 6
+
+* The first line is the original expression text, as was written in your code.
+* The second line (starting with ``A``) is the expression code, recreated from AST. Macros will be
+  missing, and the expression might be modified a bit by GCC.
+* The third line (starting with ``E``) is the evaluated expression, printed as it failed. Here we'll see the
+  exact values leading to the failure.
+* The last section is "subexpressions", where we'll see the relation between certain sub-expressions
+  in the ``assert`` (such as variables) with their values.
 
 Function calls and strings inside the ``assert`` are also displayed nicely::
 
-    // s is "42";
+    // s is "42"
 
     > assert(strtol(s, NULL, 0) == 5)
-      assert(42 == 5)
+    A assert(strtol(s, (nil), 0) == 5)
+    E assert(42 == 5)
     > subexpressions:
-      "42" = s
-      42 = strtol("42", (nil), 0)
+      s = "42"
+      strtol("42", (nil), 0) = 42
 
 Why
 ---
@@ -71,53 +85,31 @@ C is not a dynamic language like Python, so the AST can't be patched in runtime,
 during compilation. This can be done by writing a GCC plugin that'll patch the AST during
 compilation.
 
-Current PoC
------------
-
-*This was developed & tested with GCC 9.1.0 / 7.5.0*
-
-Current PoC can be run with ``make test``. It compiles the plugin itself, then (with the plugin
-active) compiles a short file containing a simple function, then compiles another file (without
-the plugin this time) which calls that simple function.
-
-The simple function is defined as follows::
-
-    int test_func(int n, int m) {
-        assert((1 != n && n != 6 && n != 5 && func3(n)) || n == 5 || n == 12 || !n || func2(n) > 43879 || n * 4 == 54 + n || n / 5 == 10 - n);
-    }
-
-The test first calls it with ``5, 2`` and we see the ``assert`` passes and nothing happens.
-Then it's called again with ``6, 5``, this time the ``assert`` triggers and the program aborts.
-But since the plugin rewrote the assert, we get a much nicer print right before aborting::
-
-    In plugin_test.c:33, function 'test_func':
-    > assert((1 != n && n != 6 && n != 5 && func3(n)) || n == 5 || n == 12 || !n || func2(n) > 43879 || n * 4 == 54 + n || n / 5 == 10 - n || m == 93)
-      assert((((((((((...) && (6 != 6)))) || ((6 == 5) || (6 == 12))) || (6 == 0)) || (9 > 43879)) || (6 * 4 == 6 + 54)) || (6 / 5 == 10 - 6)) || (5 == 93))
-    > subexpressions:
-      6 = n
-      5 = m
-      9 = func2(6)
-
-
-Hooray :)
-
-Tests
------
+Examples & Tests
+----------------
 
 Run with ``make test``. They'll compile some test programs and check their output. You
 can use it to verify your local GCC is okay with the plugin.
+
+To see some examples, you cat ``cat tests/tests.log`` after you run the tests. The output
+of all failed ``assert`` s is kept.
 
 TODOs
 -----
 
 * Relate subexpression strings to values. We already relate variables and results of function calls,
   others might be useful as well (for example, results of arithmetics?)
-* Get rid of redundant parenthesis.
-* Write some tests to see it covers most
+* Get rid of redundant parenthesis (specifically, since all expressions are binary,
+  a (... || ... || ...) expression is really ((.. || ..) || ..) and will be displayed such. But
+  usually the code is written without the extra parentheses).
 * Test it on some real projects :D
 * Make it generic - not tied to glibc's ``assert``.
 * Subtraction of consts is represented by ``PLUS_EXPR`` with a negative ``INTEGER_CST``, handle
   it nicely.
+* Handle array references and arrays in general.
+* Handle struct accesses.
+* More binary ops - & ^ | etc.
+* Prefix/postfix inc/dec ops.
 * Casts are displayed on variables, but not on function calls / binary expression results.
 
 See the plugin code for more information.
