@@ -4,6 +4,7 @@ import shutil
 import signal
 from tempfile import NamedTemporaryFile, mkdtemp
 import re
+from termcolor import colored, RESET
 import pytest
 
 from conftest import GCC
@@ -18,7 +19,7 @@ ANSI_ESCAPE = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
 
 
 def run_tester(test_prototype, test_code, calling_code, *, extra_test="",
-               skip_first=True):
+               skip_first=True, strip_colors=True):
     with NamedTemporaryFile("w", suffix=".c") as test, \
          NamedTemporaryFile("w", suffix=".c") as caller, \
          NamedTemporaryFile(suffix=".o") as obj:
@@ -44,7 +45,10 @@ def run_tester(test_prototype, test_code, calling_code, *, extra_test="",
             output = e.value.output.decode()
             assert e.value.returncode == -signal.SIGABRT.value, "output: " + output
 
-            return ANSI_ESCAPE.sub("", output).splitlines()[1 if skip_first else 0:]
+            if strip_colors:
+                output = ANSI_ESCAPE.sub("", output)
+
+            return output.splitlines()[1 if skip_first else 0:]
         finally:
             shutil.rmtree(output_dir)
 
@@ -183,4 +187,67 @@ def test_subexpression_not_evaluated():
         "E assert(42 == 5)",
         "> subexpressions:",
         "  42 = n",
+    ]
+
+
+def test_subexpression_colors():
+    """
+    tests color assigning to subexpressions:
+    1. variables get colors
+    2. casted variables get different colors
+    3. function calls get colors
+    4. subexpressions inside function calls are colored with their color
+
+    also tests the colorizing of A and E.
+    also tests AST casts.
+    """
+    extra = """
+    int func5(int n) {
+        return 7;
+    }
+    """
+
+    out = run_tester("void test(int n)", 'assert(n == 5 || (short)n == 6 || func5(n) == n);',
+                     'test(42);', extra_test=extra, strip_colors=False)
+
+    def bg(s):
+        return colored(s, "green", attrs=["bold"])
+
+    def by(s):
+        return colored(s, "yellow", attrs=["bold"])
+
+    def bm(s):
+        return colored(s, "magenta", attrs=["bold"])
+
+    assert out == [
+        "> assert(n == 5 || (short)n == 6 || func5(n) == n)",
+        colored("A", "blue", attrs=["bold"]) + " assert(((n == 5) || ((short int)n == 6)) || (func5(n) == n))",
+        colored("E", "red", attrs=["bold"]) + f" assert((({bg('42')} == 5) || ({by('42')} == 6)) || ({bm('7')} == {bg('42')}))",
+        "> subexpressions:",
+        f"  {bg('42 = n')}",
+        f"  {by('42 = (short int)n')}",
+        # necessary to stirp the RESET because the plugin doesn't emit those if it knows
+        # the next part is colored anyway.
+        f"  {bm('7 = func5(').rstrip(RESET) + bg('42').rstrip(RESET) + bm(')')}",
+    ]
+
+
+def test_ast_double_cast():
+    """
+    further tests that casts are displayed in the AST repr and also displayed in variable
+    subexpressions, makes sure "double casts" (cast then promote) are displayed:
+    that is, NOP_EXPR(CONVERT_EXPR(variable)), for example, in
+    "short x = n; x + 5 == (short)n;" everything is promoted to int:
+    "(int)x + 5 == (int)(short int)n".
+    """
+
+    out = run_tester("void test(int n)", 'short x = n; assert(x + 5 == (short)n);', 'test(5);')
+    assert out == [
+        "> assert(x + 5 == (short)n)",
+        # double cast
+        "A assert((int)x + 5 == (int)(short int)n)",
+        "E assert(5 + 5 == 5)",
+        "> subexpressions:",
+        "  5 = (int)x",
+        "  5 = (int)(short int)n",
     ]
