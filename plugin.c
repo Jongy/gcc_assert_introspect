@@ -273,12 +273,44 @@ static void assert_tree_is_save(tree expr) {
 // it's invalid to use the *value* of the inner expression, because those NOPs may express
 // real casts.
 // it's used to check the inner type & access its other fields.
-static tree strip_nop(tree expr) {
+static tree strip_nop_and_convert(tree expr) {
     if (TREE_CODE(expr) == NOP_EXPR) {
-        return TREE_OPERAND(expr, 0);
+        expr = TREE_OPERAND(expr, 0);
+    }
+    if (CONVERT_EXPR_P(expr)) { // CONVERT_EXPR may follow
+        expr = TREE_OPERAND(expr, 0);
     }
 
     return expr;
+}
+
+static const char *get_int_type_name(tree expr) {
+    tree type = TREE_TYPE(expr);
+    gcc_assert(INTEGRAL_TYPE_P(type));
+
+    if (TYPE_IDENTIFIER(type) != NULL_TREE) {
+        return IDENTIFIER_POINTER(TYPE_IDENTIFIER(type));
+    } else if (TYPE_UNSIGNED(type)) {
+        return "unsigned";
+    } else {
+        return "int";
+    }
+}
+
+static char *get_cast_repr(tree expr) {
+    char buf[1024];
+    int n = 0;
+
+    if (TREE_CODE(expr) == NOP_EXPR) {
+        n += snprintf(buf, sizeof(buf), "(%s)", get_int_type_name(expr));
+        expr = TREE_OPERAND(expr, 0);
+    }
+
+    if (CONVERT_EXPR_P(expr)) {
+        n += snprintf(buf + n, sizeof(buf) - n, "(%s)", get_int_type_name(expr));
+    }
+
+    return n ? xstrdup(buf) : NULL;
 }
 
 // NULL, defined as `(void*)0`, is an INTEGER_CST with type as POINTER_TYPE,
@@ -291,7 +323,7 @@ static bool is_NULL(tree expr) {
 }
 
 static const char *get_format_for_expr(tree expr) {
-    // this helps asserting we use the outer expression here, not the inner one (after e.g strip_nop)
+    // this helps asserting we use the outer expression here, not the inner one (after e.g strip_nop_and_convert)
     // beause we should pick a specifier for *after* the casts.
     assert_tree_is_save(expr);
 
@@ -321,6 +353,10 @@ static const char *get_format_for_expr(tree expr) {
             return "%ld";
         } else if (0 == strcmp(type_name, "long unsigned int")) {
             return "%lu";
+        } else if (0 == strcmp(type_name, "short int")) {
+            return "%hd";
+        } else if (0 == strcmp(type_name, "short unsigned int")) {
+            return "%hu";
         } else {
             printf("unknown integer type name '%s'\n", type_name);
         }
@@ -332,11 +368,13 @@ static const char *get_format_for_expr(tree expr) {
 static char *_make_assert_expr_printf_from_ast(tree expr) {
     char buf[1024];
 
-    const char *op = get_expr_op_repr(expr);
+    tree inner = strip_nop_and_convert(expr);
+    const char *op = get_expr_op_repr(inner);
     if (op) {
-        char *left = _make_assert_expr_printf_from_ast(TREE_OPERAND(expr, 0));
-        char *right = _make_assert_expr_printf_from_ast(TREE_OPERAND(expr, 1));
+        char *left = _make_assert_expr_printf_from_ast(TREE_OPERAND(inner, 0));
+        char *right = _make_assert_expr_printf_from_ast(TREE_OPERAND(inner, 1));
 
+        // TODO show casts on binary expressions
         bool parentheses = 0 == strcmp(op, "&&") || 0 == strcmp(op, "||");
         const char *left_paren = parentheses ? "(" : "";
         const char *right_paren = parentheses ? ")" : "";
@@ -347,10 +385,11 @@ static char *_make_assert_expr_printf_from_ast(tree expr) {
         free(right);
         return xstrdup(buf);
     } else {
-        tree inner = strip_nop(expr);
-
         if (DECL_P(inner)) {
-            return xstrdup(IDENTIFIER_POINTER(DECL_NAME(inner)));
+            char *cast = get_cast_repr(expr);
+            (void)snprintf(buf, sizeof(buf), "%s%s", cast ?: "", IDENTIFIER_POINTER(DECL_NAME(inner)));
+            free(cast);
+            return xstrdup(buf);
         } else if (TREE_CODE(inner) == CALL_EXPR) {
             tree fn = get_callee_fndecl(inner);
             const char *fn_name = IDENTIFIER_POINTER(DECL_NAME(fn));
@@ -475,11 +514,15 @@ static void make_decl_subexpressions_repr(location_t here, struct expr_list *lis
 
     while (list) {
         tree expr = list->expr;
-        tree raw_expr = strip_nop(from_save_maybe(expr));
+        tree unsaved = from_save_maybe(expr);
+        tree raw_expr = strip_nop_and_convert(unsaved);
+        char *cast = get_cast_repr(unsaved);
 
         char buf[1024];
-        (void)snprintf(buf, sizeof(buf), "  %s%s = %s%s\n", list->color ?: "", get_format_for_expr(expr),
-            IDENTIFIER_POINTER(DECL_NAME(raw_expr)), list->color ? RESET_COLOR : "");
+        (void)snprintf(buf, sizeof(buf), "  %s%s = %s%s%s\n", list->color ?: "", get_format_for_expr(expr),
+            cast ?: "", IDENTIFIER_POINTER(DECL_NAME(raw_expr)),
+            list->color ? RESET_COLOR : "");
+        free(cast);
 
         tree printf_call = my_build_function_call(here, printf_decl,
             tree_cons(NULL_TREE, build_string_literal_here(here, strlen(buf) + 1, buf),
@@ -553,7 +596,7 @@ static const char *make_call_subexpression_repr(tree expr, tree raw_expr, tree *
 }
 
 static const char *make_subexpressions_repr(tree expr, tree *stmts, struct make_repr_params *params) {
-    tree inner = strip_nop(from_save_maybe(expr));
+    tree inner = strip_nop_and_convert(from_save_maybe(expr));
 
     if (DECL_P(inner)) {
         return append_decl_subexpression_repr(expr, inner, params);
