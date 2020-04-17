@@ -111,7 +111,7 @@ static inline tree _build_conditional_expr(location_t colon_loc, tree ifexp,
 
 #if GCCPLUGIN_VERSION >= 8001 // a32c8316ff282ec
     return build_conditional_expr(colon_loc, ifexp, false, op1, op1_original_type,
-        UNKNOWN_LOCATION, op2, op2_original_type, UNKNOWN_LOCATION);
+        colon_loc, op2, op2_original_type, colon_loc);
 #else
     return build_conditional_expr(colon_loc, ifexp, false, op1, op1_original_type,
         op2, op2_original_type);
