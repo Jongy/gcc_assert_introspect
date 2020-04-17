@@ -338,6 +338,8 @@ static const char *get_format_for_expr(tree expr) {
         } else {
             return "%p";
         }
+    } else if (TREE_CODE(type) == BOOLEAN_TYPE) {
+        return "%d";
     } else if (INTEGRAL_TYPE_P(type)) {
         if (TYPE_IDENTIFIER(type) == NULL_TREE) {
             // default int? :o
