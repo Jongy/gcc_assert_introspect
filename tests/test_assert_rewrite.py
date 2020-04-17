@@ -69,7 +69,7 @@ def test_sanity():
         "A assert(n == 5)",
         "E assert(3 == 5)",
         "> subexpressions:",
-        "  3 = n",
+        "  n = 3",
     ]
 
 
@@ -86,8 +86,8 @@ def test_logical_and_expression_right_repr():
         "A assert((n == 42) && (m == 7))",
         "E assert((...) && (6 == 7))",
         "> subexpressions:",
-        "  42 = n",  # TODO n shouldn't be here - should show variables only if they're relevant.
-        "  6 = m",
+        "  n = 42",  # TODO n shouldn't be here - should show variables only if they're relevant.
+        "  m = 6",
     ]
 
 
@@ -102,8 +102,8 @@ def test_logical_or_expression_repr_both():
         "A assert((n == 43) || (m == 7))",
         "E assert((42 == 43) || (6 == 7))",
         "> subexpressions:",
-        "  42 = n",
-        "  6 = m",
+        "  n = 42",
+        "  m = 6",
     ]
 
 
@@ -118,8 +118,8 @@ def test_subexpression_function_call_repr():
         "A assert(f(12, n) == 5)",
         "E assert(32 == 5)",
         "> subexpressions:",
-        "  20 = n",
-        "  32 = f(12, 20)",
+        "  n = 20",
+        "  f(12, 20) = 32",
     ]
 
 
@@ -136,8 +136,8 @@ def test_subexpression_string_repr():
         'A assert(strstr("hello world", s) == NULL)',
         'E assert("world" == (nil))',
         '> subexpressions:',
-        '  "world" = s',
-        '  "world" = strstr("hello world", "world")'
+        '  s = "world"',
+        '  strstr("hello world", "world") = "world"',
     ]
 
 
@@ -168,8 +168,8 @@ def test_subexpression_evaluated_once():
         "A assert(call_me_once(n) == n)",
         "E assert(4 == 3)",
         "> subexpressions:",
-        "  3 = n",
-        "  4 = call_me_once(3)",
+        "  n = 3",
+        "  call_me_once(3) = 4",
     ]
 
 
@@ -195,7 +195,7 @@ def test_subexpression_not_evaluated():
         "A assert((n == 5) && (dont_call_me(n) == n))",
         "E assert(42 == 5)",
         "> subexpressions:",
-        "  42 = n",
+        "  n = 42",
     ]
 
 
@@ -234,11 +234,11 @@ def test_subexpression_colors():
             f"({bm('func5(').rstrip(RESET) + bg('n') + bm(')')} == {bg('n')}))",
         colored("E", "red", attrs=["bold"]) + f" assert((({bg('42')} == 5) || ({by('42')} == 6)) || ({bm('7')} == {bg('42')}))",
         "> subexpressions:",
-        f"  {bg('42 = n')}",
-        f"  {by('42 = (short int)n')}",
+        f"  {bg('n = 42')}",
+        f"  {by('(short int)n = 42')}",
         # necessary to stirp the RESET because the plugin doesn't emit those if it knows
         # the next part is colored anyway.
-        f"  {bm('7 = func5(').rstrip(RESET) + bg('42').rstrip(RESET) + bm(')')}",
+        f"  {bm('func5(').rstrip(RESET) + bg('42').rstrip(RESET) + bm(') = 7')}",
     ]
 
 
@@ -258,8 +258,8 @@ def test_ast_double_cast():
         "A assert((int)x + 5 == (int)(short int)n)",
         "E assert(5 + 5 == 5)",
         "> subexpressions:",
-        "  5 = (int)x",
-        "  5 = (int)(short int)n",
+        "  (int)x = 5",
+        "  (int)(short int)n = 5",
     ]
 
 
@@ -289,6 +289,6 @@ def test_binary_expression_casts_skipped():
         "A assert(x + 8 == n + 2)",
         "E assert(5 + 8 == 5 + 2)",
         "> subexpressions:",
-        "  5 = x",
-        "  5 = n",
+        "  x = 5",
+        "  n = 5",
     ]

@@ -590,8 +590,8 @@ static void make_decl_subexpressions_repr(location_t here, struct expr_list *lis
         char *cast = get_cast_repr(unsaved);
 
         char buf[1024];
-        (void)snprintf(buf, sizeof(buf), "  %s%s = %s%s%s\n", list->color ?: "", get_format_for_expr(expr),
-            cast ?: "", IDENTIFIER_POINTER(DECL_NAME(raw_expr)),
+        (void)snprintf(buf, sizeof(buf), "  %s%s%s = %s%s\n", list->color ?: "",
+            cast ?: "", IDENTIFIER_POINTER(DECL_NAME(raw_expr)), get_format_for_expr(expr),
             list->color ? RESET_COLOR : "");
         free(cast);
 
@@ -643,10 +643,10 @@ static const char *make_call_subexpression_repr(tree expr, tree raw_expr, tree *
     }
 
     // use the expresion type for the format, not function result type!
-    int n = snprintf(buf, sizeof(buf), "  %s%s = %s(", color ?: "", get_format_for_expr(expr), fn_name);
+    int n = snprintf(buf, sizeof(buf), "  %s%s(", color ?: "", fn_name);
 
-    // parameters to the sprintf call, first is the return value - expr itself.
-    tree call_params = tree_cons(NULL_TREE, expr, NULL_TREE);
+    // parameters to the sprintf call.
+    tree call_params = NULL_TREE;
 
     for (int i = 0; i < call_expr_nargs(raw_expr); i++) {
         tree *argp = CALL_EXPR_ARGP(raw_expr) + i;
@@ -657,11 +657,13 @@ static const char *make_call_subexpression_repr(tree expr, tree raw_expr, tree *
 
         n += snprintf(buf + n, sizeof(buf) - n, "%s%s%s, ",
             subexpr_color ?: "", get_format_for_expr(*argp), color ?: (subexpr_color ? RESET_COLOR : ""));
-        chainon(call_params, tree_cons(NULL_TREE, *argp, NULL_TREE));
+        call_params = chainon(call_params, tree_cons(NULL_TREE, *argp, NULL_TREE));
     }
 
+    call_params = chainon(call_params, tree_cons(NULL_TREE, expr, NULL_TREE)); //  last is the return value - expr itself.
+
     n -= 2; // (remove last ", ")
-    n += snprintf(buf + n, sizeof(buf) - n, ")%s\n", color ? RESET_COLOR : "");
+    n += snprintf(buf + n, sizeof(buf) - n, ") = %s%s\n", get_format_for_expr(expr), color ? RESET_COLOR : "");
 
     append_to_statement_list(make_repr_sprintf(params->here, params->call_buf_param, params->call_buf_pos,
         buf, call_params), stmts);
