@@ -39,6 +39,11 @@ Function calls and strings inside the ``assert`` are also displayed nicely::
       s = "42"
       strtol("42", (nil), 0) = 42
 
+Oh, and it's colorful:
+
+.. image:: images/example.png
+
+
 Why
 ---
 
