@@ -2,7 +2,7 @@ Assert Introspection
 ====================
 
 (WIP) GCC plugin that rewrites ``assert`` s to provide introspection about the inner expressions,
-for C (and possibly C++). No any code changes required!
+for C (and possibly C++). No code changes required!
 
 Originally, concepts were take from how ``pytest`` does it, but later on I took my way.
 
@@ -43,9 +43,37 @@ Oh, and it's colorful:
 
 .. image:: images/example.png
 
+Using it
+--------
 
-Why
----
+.. code-block:: bash
+
+   git clone --depth 1 https://github.com/Jongy/gcc_assert_introspect.git
+   cd gcc_assert_introspect
+
+   # install GCC plugin-dev, required to build GCC plugins.
+   # on Ubuntu, you'll need gcc-X-plugin-dev, where X is your GCC major.
+   # For Ubuntu 18.04 that will be:
+   sudo apt-get install gcc-7-plugin-dev
+
+   # builds, then runs tests with your local GCC
+   make test
+   # if everything passes, you're good to go!
+
+Then just add ``-fplugin=/path/to/gcc_assert_introspect/assert_introspect.so`` to your CFLAGS
+in your project. All files compiled with the plugin will have their ``assert`` s rewritten.
+
+.. note:: The plugin inserts calls to ``printf``, ``sprintf`` and ``abort`` - their declarations
+          are required and you'll get a compilation error if you fail to include relevant headers
+          ``stdio.h``, ``stdlib.h``.
+
+.. warning:: If you see ``internal compiler error`` when compiling with the plugin, it's probably
+             to blame.
+             It's still WIP, after all :) Not all expressions are supported (yet), you can
+             see the list of TODOs below.
+
+Why did I write this
+--------------------
 
 I always preferred the short and concise ``assert(...)`` statements (as opposed to the cumbersome
 assert-equal, assert-less-than, assert-string-equal etc most C/C++ unit test libraries have).
@@ -80,12 +108,12 @@ How
 
 ``pytest`` does that by rewriting Python's AST (see a brief covering of it here_). This way, the
 asserted expression can be written naturally by the user, and after parsing into AST it can be
-rewritten they please to add the extra information.
+rewritten as they please to add the extra information.
 
-.. _here: http://pybites.blogspot.com/2011/07/behind-scenes-of-pytests-new-assertion.html
+.. _here: https://pybites.blogspot.com/2011/07/behind-scenes-of-pytests-new-assertion.html
 
 In my case, since I want the expressions to be written naturally in C, we'll have to do something
-similar (so we get parsed C expressions).
+similar - rewrite the AST.
 C is not a dynamic language like Python, so the AST can't be patched in runtime, it must be changed
 during compilation. This can be done by writing a GCC plugin that'll patch the AST during
 compilation.
@@ -104,7 +132,7 @@ TODOs
 
 * Relate subexpression strings to values. We already relate variables and results of function calls,
   others might be useful as well (for example, results of arithmetics?)
-* Get rid of redundant parenthesis (specifically, since all expressions are binary,
+* Get rid of redundant parenthesss (specifically, since all expressions are binary,
   a (... || ... || ...) expression is really ((.. || ..) || ..) and will be displayed such. But
   usually the code is written without the extra parentheses).
 * Test it on some real projects :D
