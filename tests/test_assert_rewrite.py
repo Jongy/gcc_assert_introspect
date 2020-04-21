@@ -93,6 +93,8 @@ def test_logical_and_expression_right_repr():
     if the left side of an AND expression passed but the right side failed, only
     the right side is shown.
     test_subexpression_not_evaluated tests the opposite case (left side fails)
+
+    variables of the left side are not shown, as well!
     """
     out = run_tester("void test(int n, int m)", 'assert(n == 42 && m == 7);',
                      'test(42, 6);')
@@ -101,7 +103,6 @@ def test_logical_and_expression_right_repr():
         "A assert((n == 42) && (m == 7))",
         "E assert((...) && (6 == 7))",
         "> subexpressions:",
-        "  n = 42",  # TODO n shouldn't be here - should show variables only if they're relevant.
         "  m = 6",
     ]
 
@@ -127,6 +128,7 @@ def test_subexpression_function_call_repr():
     tests the generated function call repr.
     1. functions with 0, 1, 2 arguments
     2. function calls inside function calls
+    3. subexpressions are displayed in their evaluation order.
     """
     out = run_tester("void test(int n)", "assert(f2(f1(f0()), n) == 5);", "test(20);",
                      extra_test="int f2(int m, int n) { return m + n; }\n"
@@ -137,9 +139,11 @@ def test_subexpression_function_call_repr():
         f"{bb('A')} assert({bgr('f2(') + byr('f1(') + bm('f0()') + by(')') + bgr(', ') + bc('n') + bg(')')} == 5)",
         f"{br('E')} assert({bg('24')} == 5)",
         "> subexpressions:",
-        f"  {bc('n = 20')}",
+        # note - expressions are ordered in their evaluation order,
+        # f0 -> f1 -> n -> f2
         f"  {bm('f0() = 5')}",
         f"  {byr('f1(') + bmr('5') + by(') = 4')}",
+        f"  {bc('n = 20')}",
         f"  {bgr('f2(') + byr('4') + bgr(', ') + bcr('20') + bg(') = 24')}",
     ]
 
@@ -248,7 +252,7 @@ def test_subexpression_colors():
         "> subexpressions:",
         f"  {bg('n = 42')}",
         f"  {by('(short int)n = 42')}",
-        # necessary to stirp the RESET because the plugin doesn't emit those if it knows
+        # necessary to strip the RESET because the plugin doesn't emit those if it knows
         # the next part is colored anyway.
         f"  {bmr('func5(') + bgr('42') + bm(') = 7')}",
     ]
@@ -320,3 +324,19 @@ def test_ast_repr_addressof():
     ]
     # it's a real hassle to test a regex with colors
     assert re.match(r"  func5\(0x[a-f0-9]+\) = 10", ANSI_ESCAPE.sub("", out[-1]))
+
+
+def test_subexpression_var_not_evaluated():
+    """
+    variables that are part of an expression not evaluated should not be displayed.
+    """
+
+    out = run_tester("void test(int n, int m)", 'assert(n == 41 && m == 6);',
+                     'test(42, 6);')
+    assert out == [
+        "> assert(n == 41 && m == 6)",
+        "A assert((n == 41) && (m == 6))",
+        "E assert(42 == 41)",
+        "> subexpressions:",
+        "  n = 42",
+    ]
