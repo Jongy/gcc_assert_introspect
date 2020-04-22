@@ -186,10 +186,15 @@ static void wrap_in_save_expr(tree *expr) {
 
     // strip leading cast, for example promotion.
     tree inner = strip_nop_and_convert(*expr);
-    if (get_expr_op_repr((inner)) != NULL) {
+    if (get_expr_op_repr(inner) != NULL) {
         wrap_in_save_expr(&TREE_OPERAND(inner, 0));
         wrap_in_save_expr(&TREE_OPERAND(inner, 1));
+    } else if (TREE_CODE(inner) == CALL_EXPR) {
+        for (int i = 0; i < call_expr_nargs(inner); i++) {
+            wrap_in_save_expr(CALL_EXPR_ARGP(inner) + i);
+        }
     }
+
     // however, expression with the cast is the one we save.
     *expr = save_expr(*expr);
 }
