@@ -130,6 +130,7 @@ of all failed ``assert`` s is kept.
 TODOs
 -----
 
+* Expressions we currently don't know how to parse & repr are printed as "..." in the AST repr.
 * Relate subexpression strings to values. We already relate variables and results of function calls,
   others might be useful as well (for example, results of arithmetics?)
 * Get rid of redundant parenthesss (specifically, since all expressions are binary,

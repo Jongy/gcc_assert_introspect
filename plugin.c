@@ -522,9 +522,10 @@ static char *_make_assert_expr_printf_from_ast(tree expr, struct expr_list *ec) 
                 return xstrdup(buf);
             }
         }
-
-        gcc_unreachable();
     }
+
+    // unknown case: print ... for this expression.
+    return xstrdup("...");
 }
 
 // combination of make_assert_expr_printf and make_conditional_expr_repr:

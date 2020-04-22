@@ -351,3 +351,50 @@ def test_subexpression_var_not_evaluated(opt_level):
         "> subexpressions:",
         "  n = 42",
     ]
+
+
+def test_ast_unknown_expr(opt_level):
+    """
+    tests that expressions we don't know how to parse (yet) are printed as "..." in the AST repr, and
+    we don't crash.
+    ultimately I want this test to be empty ^^
+
+    currently:
+    * struct . reference
+    * struct -> reference
+    * array access
+
+    """
+
+    extra = """
+    struct c {
+        struct {
+            int a;
+        } b;
+    };
+
+    int func(int n) {
+        return n + 5;
+    }
+    """
+
+    test_code = """
+    struct c c;
+    c.b.a = 5;
+
+    struct c *cp = &c;
+
+    int arr[] = { 5, 5 };
+
+    assert(func(c.b.a + n) == 42 || cp->b.a == 12 || arr[1] + 2 == 4 * arr[0]);
+    """
+
+    out = run_tester(opt_level, "void test(int n)", test_code, 'test(6);', extra_test=extra)
+    assert out == [
+        "> assert(func(c.b.a + n) == 42 || cp->b.a == 12 || arr[1] + 2 == 4 * arr[0])",
+        "A assert(((func(... + n) == 42) || (... == 12)) || (... + 2 == ... * 4))",
+        "E assert(((16 == 42) || (5 == 12)) || (5 + 2 == 5 * 4))",
+        "> subexpressions:",
+        "  n = 6",
+        "  func(11) = 16",
+    ]
