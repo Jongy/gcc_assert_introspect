@@ -18,7 +18,7 @@ HEADERS = "#include <assert.h>\n#include <stdio.h>\n#include <stdlib.h>\n"
 ANSI_ESCAPE = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
 
 
-def run_tester(test_prototype, test_code, calling_code, *, extra_test="",
+def run_tester(opt_level, test_prototype, test_code, calling_code, *, extra_test="",
                skip_first=True, strip_colors=True, compile_error=False):
     with NamedTemporaryFile("w", suffix=".c") as test, \
          NamedTemporaryFile("w", suffix=".c") as caller, \
@@ -26,7 +26,7 @@ def run_tester(test_prototype, test_code, calling_code, *, extra_test="",
 
         test.write(HEADERS + extra_test + "{0} {{ {1} }}".format(test_prototype, test_code))
         test.flush()
-        extra_opts = ["-Werror", "-Wall", ]
+        extra_opts = ["-Werror", "-Wall", ] + ([opt_level] if opt_level else [])
         try:
             output = subprocess.check_output([GCC,
                                              "-fplugin={}".format(ASSERT_INTROSPECT_SO),
@@ -64,6 +64,11 @@ def run_tester(test_prototype, test_code, calling_code, *, extra_test="",
             shutil.rmtree(output_dir)
 
 
+@pytest.fixture(params=[None, "-O2", "-O3"])
+def opt_level(request):
+    return request.param
+
+
 # short names so colored expressions don't get too long.
 br = lambda s: colored(s, "red", attrs=["bold"])
 bb = lambda s: colored(s, "blue", attrs=["bold"])
@@ -77,8 +82,8 @@ bc = lambda s: colored(s, "cyan", attrs=["bold"])
 bcr = lambda s: bc(s)[:-len(RESET)]
 
 
-def test_sanity():
-    out = run_tester("void test(int n)", "assert(n == 5);", "test(3);")
+def test_sanity(opt_level):
+    out = run_tester(opt_level, "void test(int n)", "assert(n == 5);", "test(3);")
     assert out == [
         "> assert(n == 5)",
         "A assert(n == 5)",
@@ -88,7 +93,7 @@ def test_sanity():
     ]
 
 
-def test_logical_and_expression_right_repr():
+def test_logical_and_expression_right_repr(opt_level):
     """
     if the left side of an AND expression passed but the right side failed, only
     the right side is shown.
@@ -96,7 +101,7 @@ def test_logical_and_expression_right_repr():
 
     variables of the left side are not shown, as well!
     """
-    out = run_tester("void test(int n, int m)", 'assert(n == 42 && m == 7);',
+    out = run_tester(opt_level, "void test(int n, int m)", 'assert(n == 42 && m == 7);',
                      'test(42, 6);')
     assert out == [
         "> assert(n == 42 && m == 7)",
@@ -107,11 +112,11 @@ def test_logical_and_expression_right_repr():
     ]
 
 
-def test_logical_or_expression_repr_both():
+def test_logical_or_expression_repr_both(opt_level):
     """
     if both sides of an OR expression fail, both are printed (different logic from AND)
     """
-    out = run_tester("void test(int n, int m)", 'assert(n == 43 || m == 7);',
+    out = run_tester(opt_level, "void test(int n, int m)", 'assert(n == 43 || m == 7);',
                      'test(42, 6);')
     assert out == [
         "> assert(n == 43 || m == 7)",
@@ -123,14 +128,14 @@ def test_logical_or_expression_repr_both():
     ]
 
 
-def test_subexpression_function_call_repr():
+def test_subexpression_function_call_repr(opt_level):
     """
     tests the generated function call repr.
     1. functions with 0, 1, 2 arguments
     2. function calls inside function calls
     3. subexpressions are displayed in their evaluation order.
     """
-    out = run_tester("void test(int n)", "assert(f2(f1(f0()), n) == 5);", "test(20);",
+    out = run_tester(opt_level, "void test(int n)", "assert(f2(f1(f0()), n) == 5);", "test(20);",
                      extra_test="int f2(int m, int n) { return m + n; }\n"
                                 "int f1(int n) { return n - 1; }\n"
                                 "int f0(void) { return 5; }", strip_colors=False)
@@ -148,13 +153,13 @@ def test_subexpression_function_call_repr():
     ]
 
 
-def test_subexpression_string_repr():
+def test_subexpression_string_repr(opt_level):
     """
     tests "string pointers" are identified and their repr use %s.
     also tests that NULL is *not* identified as a string pointer, but is identified
     as NULL in the AST-rebuilt expression.
     """
-    out = run_tester("void test(const char *s)", 'assert(strstr("hello world", s) == NULL);',
+    out = run_tester(opt_level, "void test(const char *s)", 'assert(strstr("hello world", s) == NULL);',
                      'test("world");', extra_test="#include <string.h>\n")
     assert out == [
         '> assert(strstr("hello world", s) == NULL)',
@@ -166,7 +171,7 @@ def test_subexpression_string_repr():
     ]
 
 
-def test_subexpression_evaluated_once():
+def test_subexpression_evaluated_once(opt_level):
     """
     tests that subexpressions in the assert are evaluated only once (due to the use of save_expr)
     even though we show them multiple times (once in the assert repr, and once more in the
@@ -186,7 +191,7 @@ def test_subexpression_evaluated_once():
     }
     """
 
-    out = run_tester("void test(int n)", 'assert(call_me_once(n) == n);',
+    out = run_tester(opt_level, "void test(int n)", 'assert(call_me_once(n) == n);',
                      'test(3);', extra_test=extra)
     assert out == [
         "> assert(call_me_once(n) == n)",
@@ -198,7 +203,7 @@ def test_subexpression_evaluated_once():
     ]
 
 
-def test_subexpression_not_evaluated():
+def test_subexpression_not_evaluated(opt_level):
     """
     tests that a subexpression not evaluated by the original condition, will not be evaluated
     when we repr it.
@@ -213,7 +218,7 @@ def test_subexpression_not_evaluated():
     }
     """
 
-    out = run_tester("void test(int n)", 'assert(n == 5 && dont_call_me(n) == n);',
+    out = run_tester(opt_level, "void test(int n)", 'assert(n == 5 && dont_call_me(n) == n);',
                      'test(42);', extra_test=extra)
     assert out == [
         "> assert(n == 5 && dont_call_me(n) == n)",
@@ -224,7 +229,7 @@ def test_subexpression_not_evaluated():
     ]
 
 
-def test_subexpression_colors():
+def test_subexpression_colors(opt_level):
     """
     tests color assigning to subexpressions:
     1. variables get colors
@@ -241,7 +246,7 @@ def test_subexpression_colors():
     }
     """
 
-    out = run_tester("void test(int n)", 'assert(n == 5 || (short)n == 6 || func5(n) == n);',
+    out = run_tester(opt_level, "void test(int n)", 'assert(n == 5 || (short)n == 6 || func5(n) == n);',
                      'test(42);', extra_test=extra, strip_colors=False)
 
     assert out == [
@@ -258,7 +263,7 @@ def test_subexpression_colors():
     ]
 
 
-def test_ast_double_cast():
+def test_ast_double_cast(opt_level):
     """
     further tests that casts are displayed in the AST repr and also displayed in variable
     subexpressions, makes sure "double casts" (cast then promote) are displayed:
@@ -267,7 +272,7 @@ def test_ast_double_cast():
     "(int)x + 5 == (int)(short int)n".
     """
 
-    out = run_tester("void test(int n)", 'short x = n; assert(x + 5 == (short)n);', 'test(5);')
+    out = run_tester(opt_level, "void test(int n)", 'short x = n; assert(x + 5 == (short)n);', 'test(5);')
     assert out == [
         "> assert(x + 5 == (short)n)",
         # double cast
@@ -279,16 +284,16 @@ def test_ast_double_cast():
     ]
 
 
-def test_error_in_expression():
+def test_error_in_expression(opt_level):
     """
     if there's an error inside the assert expression, the plugin should identify it and refuse to
     rewrite.
     """
-    out = run_tester("void test(int n)", 'assert(n == m);', 'test(5);', compile_error=True)
+    out = run_tester(opt_level, "void test(int n)", 'assert(n == m);', 'test(5);', compile_error=True)
     assert "error: assert_introspect: previous error in expression, not rewriting assert" in out
 
 
-def test_binary_expression_casts_skipped():
+def test_binary_expression_casts_skipped(opt_level):
     """
     tests that casts on binary expressions are bypassed. for example:
 
@@ -299,7 +304,7 @@ def test_binary_expression_casts_skipped():
     in this case, the PLUS_EXR 'x + y' is wrapped in a NOP_EXPR to cast it to "long unsigned int".
     make sure the plugin identifies it and sees ahead.
     """
-    out = run_tester("void test(int n)", 'unsigned long x = n; assert(x + 8 == n + 2);', 'test(5);')
+    out = run_tester(opt_level, "void test(int n)", 'unsigned long x = n; assert(x + 8 == n + 2);', 'test(5);')
     assert out == [
         "> assert(x + 8 == n + 2)",
         "A assert(x + 8 == n + 2)",
@@ -310,11 +315,11 @@ def test_binary_expression_casts_skipped():
     ]
 
 
-def test_ast_repr_addressof():
+def test_ast_repr_addressof(opt_level):
     """
     tests the printing of &variable
     """
-    out = run_tester("void test(int n)", 'assert(!func5(&n));', 'test(5);',
+    out = run_tester(opt_level, "void test(int n)", 'assert(!func5(&n));', 'test(5);',
                      extra_test="int func5(int *n) { return *n + 5; }", strip_colors=False)
     assert out[:-1] == [
         "> assert(!func5(&n))",
@@ -326,12 +331,12 @@ def test_ast_repr_addressof():
     assert re.match(r"  func5\(0x[a-f0-9]+\) = 10", ANSI_ESCAPE.sub("", out[-1]))
 
 
-def test_subexpression_var_not_evaluated():
+def test_subexpression_var_not_evaluated(opt_level):
     """
     variables that are part of an expression not evaluated should not be displayed.
     """
 
-    out = run_tester("void test(int n, int m)", 'assert(n == 41 && m == 6);',
+    out = run_tester(opt_level, "void test(int n, int m)", 'assert(n == 41 && m == 6);',
                      'test(42, 6);')
     assert out == [
         "> assert(n == 41 && m == 6)",
