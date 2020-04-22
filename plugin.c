@@ -494,6 +494,7 @@ static char *_make_assert_expr_printf_from_ast(tree expr, struct expr_list *ec) 
                 n += snprintf(buf + n, sizeof(buf) - n, "%s%s, ", arg_repr,
                     // reinsert our color if arg itself had one (had a color in its arg_repr)
                     arg_color ? color : "");
+                free(arg_repr);
             }
 
             n -= call_expr_nargs(inner) ? 2 : 0; // (remove last ", " if we had any)
