@@ -37,6 +37,7 @@
 
 #define PLUGIN_NAME "assert_introspect"
 
+#define ESCAPE_CHAR '\x1b'
 #define RESET_COLOR "\x1b[0m"
 #define BOLD "\x1b[1m"
 #define DARK "\x1b[2m"
@@ -491,9 +492,10 @@ static char *_make_assert_expr_printf_from_ast(tree expr, struct expr_list *ec) 
                 tree arg = CALL_EXPR_ARG(inner, i);
                 char *arg_repr = _make_assert_expr_printf_from_ast(arg, ec);
                 const char *arg_color = get_subexpr_color(arg, ec);
+                bool has_color = arg_color || strchr(arg_repr, ESCAPE_CHAR);
                 n += snprintf(buf + n, sizeof(buf) - n, "%s%s, ", arg_repr,
                     // reinsert our color if arg itself had one (had a color in its arg_repr)
-                    arg_color ? color : "");
+                    has_color ? color : "");
                 free(arg_repr);
             }
 
@@ -710,9 +712,8 @@ static const char *make_call_subexpression_repr(tree expr, tree raw_expr, tree *
 
         // recursively, for my arguments
         const char *subexpr_color = make_subexpressions_repr(*argp, stmts, params);
-
         n += snprintf(buf + n, sizeof(buf) - n, "%s%s%s, ",
-            subexpr_color ?: "", get_format_for_expr(*argp), color ?: (subexpr_color ? RESET_COLOR : ""));
+            subexpr_color ?: "", get_format_for_expr(*argp), subexpr_color ? (color ?: RESET_COLOR) : "");
         call_params = chainon(call_params, tree_cons(NULL_TREE, *argp, NULL_TREE));
     }
 
@@ -734,6 +735,15 @@ static const char *make_subexpressions_repr(tree expr, tree *stmts, struct make_
         return make_decl_subexpression_repr(expr, inner, stmts, params);
     } else if (TREE_CODE(inner) == CALL_EXPR) {
         return make_call_subexpression_repr(expr, inner, stmts, params);
+    } else if (get_expr_op_repr(inner)) {
+        // another expression: for example 'func(8, n + 5)' will lead here when make_call_subexpression_repr()
+        // processes the 2nd argument.
+        // we don't call back into make_conditional_expr_repr, we don't care of the repr of the expression this
+        // time, here I just want any and all subexpressions to added to the subexpressions section.
+        (void)make_subexpressions_repr(TREE_OPERAND(inner, 0), stmts, params);
+        (void)make_subexpressions_repr(TREE_OPERAND(inner, 1), stmts, params);
+        // no need to color the "value" of this expression.
+        return NULL;
     }
 
     return NULL;

@@ -38,7 +38,7 @@ def run_tester(opt_level, test_prototype, test_code, calling_code, *, extra_test
             return e.stderr.decode()
         else:
             lines = output.decode().splitlines()
-            assert len(lines) == 1 and lines[0].startswith("assert_introspect loaded")
+            assert len(lines) == 1 and lines[0].startswith("assert_introspect loaded"), output
 
         caller.write(HEADERS + "{0}; int main(void) {{ setlinebuf(stdout); {1}; return 0; }}"
             .format(test_prototype, calling_code))
@@ -80,6 +80,7 @@ bm = lambda s: colored(s, "magenta", attrs=["bold"])
 bmr = lambda s: bm(s)[:-len(RESET)]
 bc = lambda s: colored(s, "cyan", attrs=["bold"])
 bcr = lambda s: bc(s)[:-len(RESET)]
+dr = lambda s: colored(s, "red", attrs=["dark"])
 
 
 def test_sanity(opt_level):
@@ -236,6 +237,8 @@ def test_subexpression_colors(opt_level):
     2. casted variables get different colors
     3. function calls get colors
     4. subexpressions inside function calls are colored with their color
+    5. parts of complex subexpressions inside function calls are colored with their color
+       (variables + function calls part of a binary expression) + added to subexpressions
 
     also tests the colorizing of A and E.
     also tests AST casts.
@@ -246,20 +249,23 @@ def test_subexpression_colors(opt_level):
     }
     """
 
-    out = run_tester(opt_level, "void test(int n)", 'assert(n == 5 || (short)n == 6 || func5(n) == n);',
+    out = run_tester(opt_level, "void test(int n)", 'assert(n == 5 || (short)n == 6 || func5(n) == n || func5(n + func5(9)) == 12);',
                      'test(42);', extra_test=extra, strip_colors=False)
 
     assert out == [
-        "> assert(n == 5 || (short)n == 6 || func5(n) == n)",
-        f"{bb('A')} assert((({bg('n')} == 5) || ({by('(short int)n')} == 6)) || "
-            f"({bmr('func5(') + bg('n') + bm(')')} == {bg('n')}))",
-        f"{br('E')} assert((({bg('42')} == 5) || ({by('42')} == 6)) || ({bm('7')} == {bg('42')}))",
+        "> assert(n == 5 || (short)n == 6 || func5(n) == n || func5(n + func5(9)) == 12)",
+        f"{bb('A')} assert(((({bg('n')} == 5) || ({by('(short int)n')} == 6)) || "
+            f"({bmr('func5(') + bg('n') + bm(')')} == {bg('n')})) || ({bcr('func5(') + dr('func5(9)') + ' + ' + bg('n') + bc(')')} == 12))",
+        f"{br('E')} assert(((({bg('42')} == 5) || ({by('42')} == 6)) || ({bm('7')} == {bg('42')}))"
+            f" || ({bc('7')} == 12))",
         "> subexpressions:",
         f"  {bg('n = 42')}",
         f"  {by('(short int)n = 42')}",
         # necessary to strip the RESET because the plugin doesn't emit those if it knows
         # the next part is colored anyway.
         f"  {bmr('func5(') + bgr('42') + bm(') = 7')}",
+        f"  {dr('func5(9) = 7')}",
+        f"  {bc('func5(49) = 7')}",
     ]
 
 
