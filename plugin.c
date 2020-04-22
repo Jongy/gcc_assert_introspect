@@ -1004,6 +1004,12 @@ static void finish_decl_callback(void *event_data, void *user_data) {
 
 int plugin_init(struct plugin_name_args *plugin_info, struct plugin_gcc_version *version) {
     printf(PLUGIN_NAME " loaded, compiled for GCC %s\n", gcc_version.basever);
+
+    if (!plugin_default_version_check(version, &gcc_version)) {
+        error("incompatible gcc/plugin versions");
+        return 1;
+    }
+
     register_callback(plugin_info->base_name, PLUGIN_PRE_GENERICIZE, pre_genericize_callback, NULL);
     register_callback(plugin_info->base_name, PLUGIN_FINISH_DECL, finish_decl_callback, NULL);
 
