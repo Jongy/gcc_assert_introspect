@@ -121,8 +121,8 @@ compilation.
 Examples & Tests
 ----------------
 
-Run with ``make test``. They'll compile some test programs and check their output. You
-can use it to verify your local GCC is okay with the plugin.
+``python3 -m pip install -r tests/requirements.txt`` then run with ``make test``. They'll compile some test programs
+and check their output. You can use it to verify your local GCC is okay with the plugin.
 
 To see some examples, you cat ``cat tests/tests.log`` after you run the tests. The output
 of all failed ``assert`` s is kept.

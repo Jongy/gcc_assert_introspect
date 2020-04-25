@@ -17,7 +17,7 @@ run: tester
 	./tester
 
 test: $(PLUGIN)
-	cd tests && pytest -vv --gcc $(GCC) .
+	cd tests && python3 -m pytest -vv --gcc $(GCC) .
 
 clean:
 	rm -f $(PLUGIN) *.o
