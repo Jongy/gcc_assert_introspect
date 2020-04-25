@@ -6,7 +6,7 @@ for C (and possibly C++). No code changes required!
 
 Originally, concepts were take from how ``pytest`` does it, but later on I took my way.
 
-*This was developed & tested with GCC 9.2.0 / 9.1.0 / 7.5.0*
+*This was developed & tested with GCC 9.3.0 / 9.2.0 / 9.1.0 / 7.5.0*
 
 TL;DR
 -----
