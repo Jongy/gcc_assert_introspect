@@ -6,6 +6,9 @@ for C (and possibly C++). No code changes required!
 
 Originally, concepts were take from how ``pytest`` does it, but later on I took my way.
 
+I also wrote a `blog post <https://jongy.github.io/2020/04/25/gcc-assert-introspect.html>`_ about this plugin,
+if you're interested in reading further than what's described here.
+
 *This was developed & tested with GCC 9.3.0 / 9.2.0 / 9.1.0 / 7.5.0*
 
 TL;DR
