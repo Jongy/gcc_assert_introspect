@@ -66,14 +66,13 @@ Using it
 Then just add ``-fplugin=/path/to/gcc_assert_introspect/assert_introspect.so`` to your CFLAGS
 in your project. All files compiled with the plugin will have their ``assert`` s rewritten.
 
-.. note:: The plugin inserts calls to ``printf``, ``sprintf`` and ``abort`` - their declarations
-          are required and you'll get a compilation error if you fail to include relevant headers
-          ``stdio.h``, ``stdlib.h``.
+The plugin inserts calls to ``printf``, ``sprintf`` and ``abort`` - their declarations
+are required and you'll get a compilation error if you fail to include relevant headers
+``stdio.h``, ``stdlib.h``.
 
-.. warning:: If you see ``internal compiler error`` when compiling with the plugin, it's probably
-             to blame.
-             It's still WIP, after all :) Not all expressions are supported (yet), you can
-             see the list of TODOs below.
+*If you see "internal compiler error" messages when compiling with the plugin, it's probably to blame.
+It's still WIP, after all :) Not all expressions are supported (yet), you can
+see the list of TODOs below.*
 
 Why did I write this
 --------------------
