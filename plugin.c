@@ -530,7 +530,7 @@ static char *_make_assert_expr_printf_from_ast(tree expr, struct expr_list *ec) 
                 bool has_color = arg_color || strchr(arg_repr, ESCAPE_CHAR);
                 n += snprintf(buf + n, sizeof(buf) - n, "%s%s, ", arg_repr,
                     // reinsert our color if arg itself had one (had a color in its arg_repr)
-                    has_color ? color : "");
+                    has_color ? (color ?: ""): "");
                 free(arg_repr);
             }
 
@@ -604,6 +604,8 @@ static const char *SUBEXPR_COLORS[] = {
     DARK BLUE,
     DARK GREEN,
     DARK YELLOW,
+    DARK MAGENTA,
+    DARK CYAN,
     // enough
 };
 
