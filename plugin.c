@@ -158,6 +158,7 @@ static const char *get_expr_op_repr(tree expr) {
     case MINUS_EXPR: op = "-"; break;
     case MULT_EXPR: op = "*"; break;
     case TRUNC_DIV_EXPR: op = "/"; break;
+    case RDIV_EXPR: op = "/"; break;
     case TRUNC_MOD_EXPR: op = "%"; break;
     default: op = NULL; break;
     }
@@ -322,17 +323,38 @@ static const char *get_int_type_name(tree expr) {
     }
 }
 
+static const char *get_real_type_name(tree expr) {
+    tree type = TREE_TYPE(expr);
+    gcc_assert(SCALAR_FLOAT_TYPE_P(type));
+
+    if (TYPE_IDENTIFIER(type) != NULL_TREE) {
+        return IDENTIFIER_POINTER(TYPE_IDENTIFIER(type));
+    } else {
+        return "float";
+    }
+}
+
+static const char *get_type_name(tree expr) {
+    if (INTEGRAL_TYPE_P(TREE_TYPE(expr))) {
+        return get_int_type_name(expr);
+    } else if (SCALAR_FLOAT_TYPE_P(TREE_TYPE(expr))) {
+        return get_real_type_name(expr);
+    } else {
+        return "..."; // dots for unknown
+    }
+}
+
 static char *get_cast_repr(tree expr) {
     char buf[1024];
     int n = 0;
 
     if (TREE_CODE(expr) == NOP_EXPR) {
-        n += snprintf(buf, sizeof(buf), "(%s)", get_int_type_name(expr));
+        n += snprintf(buf, sizeof(buf), "(%s)", get_type_name(expr));
         expr = TREE_OPERAND(expr, 0);
     }
 
     if (CONVERT_EXPR_P(expr)) {
-        n += snprintf(buf + n, sizeof(buf) - n, "(%s)", get_int_type_name(expr));
+        n += snprintf(buf + n, sizeof(buf) - n, "(%s)", get_type_name(expr));
     }
 
     return n ? xstrdup(buf) : NULL;
@@ -447,6 +469,19 @@ static const char *get_format_for_expr(tree expr) {
         } else {
             printf("unknown integer type name '%s'\n", type_name);
         }
+    } else if (SCALAR_FLOAT_TYPE_P(type)) {
+        const char *type_name = IDENTIFIER_POINTER(TYPE_IDENTIFIER(type));
+        // %f adds annoying trailing zeros, but %g for larger numbers prints in scientific notation (6e+7)
+        // and truncates precision. so I went with %f.
+        if (0 == strcmp(type_name, "float")) {
+            return "%f";
+        } else if (0 == strcmp(type_name, "double")) {
+            return "%f";
+        } else if (0 == strcmp(type_name, "long double")) {
+            return "%Lf";
+        } else {
+            printf("unknown float type name '%s'\n", type_name);
+        }
     }
 
     gcc_unreachable();
@@ -508,6 +543,9 @@ static char *_make_assert_expr_printf_from_ast(tree expr, struct expr_list *ec) 
         } else if (TREE_CODE(inner) == INTEGER_CST) {
             gcc_assert(TREE_INT_CST_NUNITS(inner) == 1); // TODO handle greater
             (void)snprintf(buf, sizeof(buf), get_format_for_expr(inner), TREE_INT_CST_LOW(inner));
+            return xstrdup(buf);
+        } else if (TREE_CODE(inner) == REAL_CST) {
+            (void)snprintf(buf, sizeof(buf), get_format_for_expr(expr), TREE_REAL_CST(expr));
             return xstrdup(buf);
         } else if (TREE_CODE(inner) == ADDR_EXPR) {
             tree addr_inner = TREE_OPERAND(inner, 0);

@@ -398,3 +398,44 @@ def test_ast_unknown_expr(opt_level):
         "  n = 6",
         "  func(11) = 16",
     ]
+
+
+def test_floating_point_support(opt_level):
+    """
+    tests the plugin handles expressions containing floating point stuff.
+    1. float consts
+    2. double consts
+    3. float -> double casts
+    4. double -> float casts
+    5. float div operation repr
+    6. AST repr of the above
+    """
+
+    extra = """
+    double double_func(float f) {
+        return (double)f + 5.2;
+    }
+    """
+
+    test_code = """
+    double d = 5999999999.9999;
+    long double dd = 43.54;
+    assert(double_func((float)d) == (double)f || d == double_func(f) || dd == double_func(f) * 3.5 || dd == double_func(f) / 5.2);
+    """
+
+    out = run_tester(opt_level, "void test(float f)", test_code, 'test(6.0f);', extra_test=extra)
+    assert out == [
+        "> assert(double_func((float)d) == (double)f || d == double_func(f) || dd == double_func(f) * 3.5 || dd == double_func(f) / 5.2)",
+        "A assert((((double_func((float)d) == (double)f) || (double_func(f) == d)) || (double_func(f) * 0.000000 == dd)) || (double_func(f) / 0.000000 == dd))",
+        "E assert((((6000000005.200000 == 6.000000) || (11.200000 == 5999999999.999900)) || (11.200000 * 3.500000 == 43.540000)) || (11.200000 / 5.200000 == 43.540000))",
+        "> subexpressions:",
+        "  (float)d = 6000000000.000000",
+        "  double_func(6000000000.000000) = 6000000005.200000",
+        "  (double)f = 6.000000",
+        "  f = 6.000000",
+        "  double_func(6.000000) = 11.200000",
+        "  d = 5999999999.999900",
+        "  double_func(6.000000) = 11.200000",
+        "  dd = 43.540000",
+        "  double_func(6.000000) = 11.200000",
+    ]
