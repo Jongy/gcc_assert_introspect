@@ -144,7 +144,6 @@ TODOs
   it nicely.
 * Handle array references and arrays in general.
 * Handle struct accesses.
-* More binary ops - & ^ | etc.
 * Prefix/postfix inc/dec ops.
 * Casts are displayed on variables, but not on function calls / binary expression results.
 

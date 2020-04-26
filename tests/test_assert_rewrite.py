@@ -439,3 +439,21 @@ def test_floating_point_support(opt_level):
         "  dd = 43.540000",
         "  double_func(6.000000) = 11.200000",
     ]
+
+
+def test_binary_ops(opt_level):
+    """
+    tests various binary ops I saw are untested in other tests.
+    - | & ^
+    """
+    test_code = "assert(n - 5 == m + 2 || (n ^ 3) == m || (n & m) == 10 || (n | m) == 30);"
+
+    out = run_tester(opt_level, "void test(int n, int m)", test_code, 'test(42, 12);')
+    assert out == [
+        "> assert(n - 5 == m + 2 || (n ^ 3) == m || (n & m) == 10 || (n | m) == 30)",
+        "A assert((((n + -5 == m + 2) || (n ^ 3 == m)) || (n & m == 10)) || (n | m == 30))",
+        "E assert((((42 + -5 == 12 + 2) || (42 ^ 3 == 12)) || (42 & 12 == 10)) || (42 | 12 == 30))",
+        "> subexpressions:",
+        "  n = 42",
+        "  m = 12",
+    ]

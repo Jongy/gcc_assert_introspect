@@ -160,6 +160,9 @@ static const char *get_expr_op_repr(tree expr) {
     case TRUNC_DIV_EXPR: op = "/"; break;
     case RDIV_EXPR: op = "/"; break;
     case TRUNC_MOD_EXPR: op = "%"; break;
+    case BIT_IOR_EXPR: op = "|"; break;
+    case BIT_XOR_EXPR: op = "^"; break;
+    case BIT_AND_EXPR: op = "&"; break;
     default: op = NULL; break;
     }
 
