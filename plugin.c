@@ -33,6 +33,7 @@
 #include <tree-iterator.h>
 #include <c-family/c-common.h>
 #include <c-tree.h>
+#include <stringpool.h>
 #include <plugin-version.h>
 
 #define PLUGIN_NAME "assert_introspect"
@@ -885,11 +886,19 @@ static tree make_conditional_expr_repr(struct make_repr_params *params, tree exp
     }
 }
 
-static bool function_decl_missing_error(location_t here, tree func_decl, const char *name) {
-    if (func_decl == NULL_TREE) {
+static bool function_decl_missing_error(location_t here, tree *func_decl, const char *name) {
+    if (*func_decl != NULL_TREE) {
+        return false;
+    }
+
+    tree ident = get_identifier(name);
+    *func_decl = lookup_name(ident);
+    if (*func_decl == NULL_TREE) {
         error_at(here, PLUGIN_NAME ": plugin requires declaration of '%s', please include relevant header\n", name);
         return true;
     }
+
+    gcc_assert(TREE_CODE(*func_decl) == FUNCTION_DECL);
 
     return false;
 }
@@ -913,9 +922,9 @@ static tree make_assert_failed_body(location_t here, tree cond_expr) {
     //
     // lastly, the assert repr is printed, and abort() is called.
 
-    if (function_decl_missing_error(here, printf_decl, "printf") ||
-        function_decl_missing_error(here, sprintf_decl, "sprintf") ||
-        function_decl_missing_error(here, abort_decl, "abort")) {
+    if (function_decl_missing_error(here, &printf_decl, "printf") ||
+        function_decl_missing_error(here, &sprintf_decl, "sprintf") ||
+        function_decl_missing_error(here, &abort_decl, "abort")) {
 
         // continue unmodified.
         return cond_expr;
@@ -1047,21 +1056,6 @@ static void pre_genericize_callback(void *event_data, void *user_data) {
     }
 }
 
-static void finish_decl_callback(void *event_data, void *user_data) {
-    tree decl = (tree)event_data;
-
-    // TODO use GCC's lookup_name instead
-    if (TREE_CODE(decl) == FUNCTION_DECL && 0 == strcmp("printf", IDENTIFIER_POINTER(DECL_NAME(decl)))) {
-        printf_decl = decl;
-    }
-    if (TREE_CODE(decl) == FUNCTION_DECL && 0 == strcmp("abort", IDENTIFIER_POINTER(DECL_NAME(decl)))) {
-        abort_decl = decl;
-    }
-    if (TREE_CODE(decl) == FUNCTION_DECL && 0 == strcmp("sprintf", IDENTIFIER_POINTER(DECL_NAME(decl)))) {
-        sprintf_decl = decl;
-    }
-}
-
 int plugin_init(struct plugin_name_args *plugin_info, struct plugin_gcc_version *version) {
     printf(PLUGIN_NAME " loaded, compiled for GCC %s\n", gcc_version.basever);
 
@@ -1071,7 +1065,6 @@ int plugin_init(struct plugin_name_args *plugin_info, struct plugin_gcc_version 
     }
 
     register_callback(plugin_info->base_name, PLUGIN_PRE_GENERICIZE, pre_genericize_callback, NULL);
-    register_callback(plugin_info->base_name, PLUGIN_FINISH_DECL, finish_decl_callback, NULL);
 
     return 0;
 }
