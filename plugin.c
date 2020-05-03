@@ -69,7 +69,10 @@ static tree abort_decl = NULL_TREE;
 static tree sprintf_decl = NULL_TREE;
 
 // based on build_function_call(), with some fixes.
-// see https://gcc.gnu.org/pipermail/gcc/2020-April/232127.html for explanation.
+// see https://gcc.gnu.org/bugzilla/show_bug.cgi?id=94664 for explanation.
+// I tried using build_call_expr() variants instead, but c_build_function_call_vec()
+// does other required logic, for example runs conversion of arguments to their respective
+// parameter type, promotions and probably more.
 tree my_build_function_call(location_t loc, tree function, tree params)
 {
     const int len = list_length(params);
