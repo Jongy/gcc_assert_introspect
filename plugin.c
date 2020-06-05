@@ -1013,6 +1013,24 @@ static tree patch_assert(tree cond_expr) {
     return new_cond;
 }
 
+// for individual statements - check if they're the COND_EXPR of assert()s.
+// see the docs of is_assert_fail_cond_expr().
+static tree maybe_patch_statement(tree stmt) {
+    if (is_assert_fail_cond_expr(stmt)) {
+        gcc_assert(TREE_CODE(stmt) == COND_EXPR);
+
+        // as far as I understand it, if there's any error inside COND_EXPR_COND,
+        // the entire expression will be marked as error.
+        if (!error_operand_p(COND_EXPR_COND(stmt))) {
+            return patch_assert(stmt);
+        } else {
+            error_at(EXPR_LOCATION(stmt), PLUGIN_NAME ": previous error in expression, not rewriting assert\n");
+        }
+    }
+
+    return NULL_TREE;
+}
+
 static void iterate_function_body(tree expr) {
     tree body;
 
@@ -1029,22 +1047,22 @@ static void iterate_function_body(tree expr) {
 
             if (TREE_CODE(stmt) == BIND_EXPR) {
                 iterate_function_body(stmt);
+            } else {
+                tree patched = maybe_patch_statement(stmt);
+                if (patched != NULL_TREE) {
+                    tsi_delink(&i);
+                    // after delink we might be at the end, so move iterator to the new statement
+                    // (effectively going back 1)
+                    // it won't match, anyway :)
+                    tsi_link_before(&i, patched, TSI_NEW_STMT);
+                }
             }
         }
     } else {
-        // for individual statements in BIND_EXPRs - check if they're the COND_EXPR of assert()s.
-        // see the docs of is_assert_fail_cond_expr().
-        if (is_assert_fail_cond_expr(body)) {
+        tree patched = maybe_patch_statement(body);
+        if (patched != NULL_TREE) {
             gcc_assert(TREE_CODE(expr) == BIND_EXPR);
-            gcc_assert(TREE_CODE(body) == COND_EXPR);
-
-            // as far as I understand it, if there's any error inside COND_EXPR_COND,
-            // the entire expression will be marked as error.
-            if (!error_operand_p((COND_EXPR_COND(body)))) {
-                BIND_EXPR_BODY(expr) = patch_assert(body);
-            } else {
-                error_at(EXPR_LOCATION(body), PLUGIN_NAME ": previous error in expression, not rewriting assert\n");
-            }
+            BIND_EXPR_BODY(expr) = patched;
         }
     }
 }
