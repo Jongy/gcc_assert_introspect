@@ -589,9 +589,10 @@ static char *_make_assert_expr_printf_from_ast(tree expr, struct expr_list *ec) 
                 return xstrdup(buf);
             } else {
                 // handle &variable
-                gcc_assert(DECL_P(addr_inner));
-                (void)snprintf(buf, sizeof(buf), "&%s", IDENTIFIER_POINTER(DECL_NAME(addr_inner)));
-                return xstrdup(buf);
+                if (DECL_P(addr_inner)) {
+                    (void)snprintf(buf, sizeof(buf), "&%s", IDENTIFIER_POINTER(DECL_NAME(addr_inner)));
+                    return xstrdup(buf);
+                }
             }
         }
     }
