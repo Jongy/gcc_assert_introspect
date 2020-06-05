@@ -552,6 +552,10 @@ static char *_make_assert_expr_printf_from_ast(tree expr, struct expr_list *ec) 
         } else if (TREE_CODE(inner) == CALL_EXPR) {
             // TODO show casts on function calls
             tree fn = get_callee_fndecl(inner);
+            if (NULL_TREE == fn) {
+                // see comment on the second call site of get_callee_fndecl
+                return xstrdup("<unknown>(..)");
+            }
             const char *fn_name = IDENTIFIER_POINTER(DECL_NAME(fn));
             const char *color = get_subexpr_color(expr, ec);
 
@@ -769,6 +773,16 @@ static const char *make_call_subexpression_repr(tree expr, tree raw_expr, tree *
     char buf[1024];
 
     tree fn = get_callee_fndecl(raw_expr);
+    if (NULL_TREE == fn) {
+        // get_callee_fndecl fails for some cases.
+        // specifically I've seen it fail for a pointer call via a struct member
+        // (it was 'ht->hash_func(entry->key)' from CPython hashtable.c)
+        // leaving it as a future point for improvement... meanwhile we just bail out.
+        // TODO what should probably be done is, to get the function *type* rather than decl:
+        // obviously the function decl is unknown at build time, if it's an indiret call through
+        // a pointer.
+        return NULL;
+    }
     const char *fn_name = IDENTIFIER_POINTER(DECL_NAME(fn));
 
     const char *color = alloc_subexpr_color(params);
