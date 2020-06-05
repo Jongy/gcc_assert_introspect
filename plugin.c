@@ -825,6 +825,13 @@ static const char *make_subexpressions_repr(tree expr, tree *stmts, struct make_
     return NULL;
 }
 
+// used when we're about to evaluate these again, they better be SAVE_EXPR.
+static void assert_both_operands_are_save(tree expr) {
+    gcc_assert(TREE_OPERAND_LENGTH(expr) == 2);
+    assert_tree_is_save(TREE_OPERAND(expr, 0));
+    assert_tree_is_save(TREE_OPERAND(expr, 1));
+}
+
 // this function is the core logic: it recursively generates a conditional expressions that walks
 // `expr`, following short cicuting rules, creating the repr buf for `expr` based on what subexpressions
 // have failed and which didn't. for example, if an && expression left-hand side fails, the generated
@@ -832,12 +839,6 @@ static const char *make_subexpressions_repr(tree expr, tree *stmts, struct make_
 static tree make_conditional_expr_repr(struct make_repr_params *params, tree expr) {
     tree raw_expr = from_save_maybe(expr);
     const enum tree_code code = TREE_CODE(raw_expr);
-
-    if (TREE_OPERAND_LENGTH(raw_expr) == 2) {
-        // we're about to evaluate these again, they better be SAVE_EXPR.
-        assert_tree_is_save(TREE_OPERAND(raw_expr, 0));
-        assert_tree_is_save(TREE_OPERAND(raw_expr, 1));
-    }
 
     location_t here = params->here;
     tree buf_param = params->buf_param;
@@ -848,6 +849,8 @@ static tree make_conditional_expr_repr(struct make_repr_params *params, tree exp
     // * if right fails, we print (...) && right
     // * if both pass, we print nothing
     if (code == TRUTH_ANDIF_EXPR || code == TRUTH_AND_EXPR) {
+        assert_both_operands_are_save(raw_expr);
+
         tree stmts = alloc_stmt_list();
         append_to_statement_list(make_conditional_expr_repr(params, TREE_OPERAND(raw_expr, 0)), &stmts);
 
@@ -870,6 +873,8 @@ static tree make_conditional_expr_repr(struct make_repr_params *params, tree exp
     // * if left and right fail, we print both
     // * if any pass, we print nothing
     else if (code == TRUTH_ORIF_EXPR || code == TRUTH_OR_EXPR) {
+        assert_both_operands_are_save(raw_expr);
+
         tree stmts = alloc_stmt_list();
         append_to_statement_list(make_repr_sprintf(here, buf_param, buf_pos, "(", NULL_TREE), &stmts);
         append_to_statement_list(make_conditional_expr_repr(params, TREE_OPERAND(raw_expr, 0)), &stmts);
@@ -890,6 +895,8 @@ static tree make_conditional_expr_repr(struct make_repr_params *params, tree exp
         const char *op = get_expr_op_repr(inner);
 
         if (op != NULL) {
+            assert_both_operands_are_save(inner);
+
             // TODO handle escaping more nicely :/
             if (0 == strcmp(op, "%")) {
                 op = "%%"; // escape for the sprintf emitted here
