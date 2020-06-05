@@ -472,27 +472,37 @@ static const char *get_format_for_expr(tree expr) {
     } else if (TREE_CODE(type) == BOOLEAN_TYPE) {
         return "%d";
     } else if (INTEGRAL_TYPE_P(type)) {
-        if (TYPE_IDENTIFIER(type) == NULL_TREE) {
-            // default int? :o
-            return TYPE_UNSIGNED(type) ? "%u" : "%d";
+
+        if (NULL_TREE != TYPE_IDENTIFIER(type)) {
+            const char *type_name = IDENTIFIER_POINTER(TYPE_IDENTIFIER(type));
+
+            if (0 == strcmp(type_name, "int")) {
+                return "%d";
+            } else if (0 == strcmp(type_name, "unsigned int")) {
+                return "%u";
+            } else if (0 == strcmp(type_name, "long int")) {
+                return "%ld";
+            } else if (0 == strcmp(type_name, "long unsigned int")) {
+                return "%lu";
+            } else if (0 == strcmp(type_name, "short int")) {
+                return "%hd";
+            } else if (0 == strcmp(type_name, "short unsigned int")) {
+                return "%hu";
+            }
         }
 
-        const char *type_name = IDENTIFIER_POINTER(TYPE_IDENTIFIER(type));
-        if (0 == strcmp(type_name, "int")) {
-            return "%d";
-        } else if (0 == strcmp(type_name, "unsigned int")) {
-            return "%u";
-        } else if (0 == strcmp(type_name, "long int")) {
-            return "%ld";
-        } else if (0 == strcmp(type_name, "long unsigned int")) {
-            return "%lu";
-        } else if (0 == strcmp(type_name, "short int")) {
-            return "%hd";
-        } else if (0 == strcmp(type_name, "short unsigned int")) {
-            return "%hu";
-        } else {
-            printf("unknown integer type name '%s'\n", type_name);
+        // else - fallback to decide by size. which might be enough, perhaps it's okay
+        // to remove the above section...
+
+        const int is_unsigned = TYPE_UNSIGNED(type);
+        switch (TREE_INT_CST_LOW(TYPE_SIZE_UNIT(type))) {
+        case 1: return is_unsigned ? PRIu8  : PRId8;
+        case 2: return is_unsigned ? PRIu16 : PRId16;
+        case 4: return is_unsigned ? PRIu32 : PRId32;
+        case 8: return is_unsigned ? PRIu64 : PRId64;
         }
+
+        printf("unhandled integer type!\n");
     } else if (SCALAR_FLOAT_TYPE_P(type)) {
         const char *type_name = IDENTIFIER_POINTER(TYPE_IDENTIFIER(type));
         // %f adds annoying trailing zeros, but %g for larger numbers prints in scientific notation (6e+7)
