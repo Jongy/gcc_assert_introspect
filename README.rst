@@ -1,13 +1,16 @@
 Assert Introspection
 ====================
 
-(WIP) GCC plugin that rewrites ``assert`` s to provide introspection about the inner expressions,
+GCC plugin that rewrites ``assert`` s to provide introspection about the inner expressions,
 for C (and possibly C++). No code changes required!
 
 Originally, concepts were take from how ``pytest`` does it, but later on I took my way.
 
 I also wrote a `blog post <https://jongy.github.io/2020/04/25/gcc-assert-introspect.html>`_ about this plugin,
 if you're interested in reading further than what's described here.
+
+Largest project I've successfully compiled with this is CPython (where some asserts were missed and left
+uninstrumented... but nonetheless it was still useful for my purpose of debugging CPython)
 
 *This was developed & tested with GCC 9.3.0 / 9.2.0 / 9.1.0 / 7.5.0*
 
@@ -65,6 +68,7 @@ Using it
 
 Then just add ``-fplugin=/path/to/gcc_assert_introspect/assert_introspect.so`` to your CFLAGS
 in your project. All files compiled with the plugin will have their ``assert`` s rewritten.
+Also, make sure to enable asserts! (that is, no ``-DNDEBUG``).
 
 The plugin inserts calls to ``printf``, ``sprintf`` and ``abort`` - their declarations
 are required and you'll get a compilation error if you fail to include relevant headers
@@ -138,7 +142,6 @@ TODOs
 * Get rid of redundant parenthesss (specifically, since all expressions are binary,
   a (... || ... || ...) expression is really ((.. || ..) || ..) and will be displayed such. But
   usually the code is written without the extra parentheses).
-* Test it on some real projects :D
 * Make it generic - not tied to glibc's ``assert``.
 * Subtraction of consts is represented by ``PLUS_EXPR`` with a negative ``INTEGER_CST``, handle
   it nicely.
@@ -146,5 +149,7 @@ TODOs
 * Handle struct accesses.
 * Prefix/postfix inc/dec ops.
 * Casts are displayed on variables, but not on function calls / binary expression results.
+* Not all constructs of ``assert`` invocations are matched. Not sure if it's because the iteration over
+  functions is incomplete, or the ``is_assert_fail_cond_expr`` misses. Happens with CPython.
 
 See the plugin code for more information.
