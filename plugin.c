@@ -608,11 +608,11 @@ static char *_make_assert_expr_printf_from_ast(tree expr, struct expr_list *ec) 
 // combination of make_assert_expr_printf and make_conditional_expr_repr:
 // this prints the "expression text" without evaluation anything (like make_assert_expr_printf),
 // but it generates this text from AST (like make_conditional_expr_repr)
-static void make_assert_expr_printf_from_ast(location_t here, tree cond_expr, struct expr_list *ec, tree *stmts) {
+static void make_assert_expr_printf_from_ast(location_t here, tree cond_expr, struct expr_list *ec, tree *stmts, bool swapped) {
     char *expr_text = _make_assert_expr_printf_from_ast(cond_expr, ec);
 
     char buf[1024];
-    snprintf(buf, sizeof(buf), BOLD_BLUE("A") " assert(%s)\n", expr_text);
+    snprintf(buf, sizeof(buf), BOLD_BLUE("A") " assert(%s%s%s)\n", swapped ? "!(" : "", expr_text, swapped ? ")": "");
     free(expr_text);
 
     append_to_statement_list(my_build_function_call(here, printf_decl,
@@ -955,7 +955,7 @@ static bool function_decl_missing_error(location_t here, tree *func_decl, const 
     return false;
 }
 
-static tree make_assert_failed_body(location_t here, tree cond_expr) {
+static tree make_assert_failed_body(location_t here, tree cond_expr, bool swapped) {
     // the patched expression is as follows:
     //
     // we create a new BIND_EXPR - local scope, in which we define
@@ -986,8 +986,8 @@ static tree make_assert_failed_body(location_t here, tree cond_expr) {
     tree first_stmts = alloc_stmt_list();
     tree block = make_node(BLOCK);
 
+    tree call = swapped ? COND_EXPR_THEN(cond_expr) : COND_EXPR_ELSE(cond_expr);
     // print "> assert(...)" with the original expression text
-    tree call = assert_fail_in_then(cond_expr) ? COND_EXPR_THEN(cond_expr) : COND_EXPR_ELSE(cond_expr);
     make_assert_expr_printf(here, call, &first_stmts);
 
     tree buf_param, buf_pos;
@@ -1017,8 +1017,10 @@ static tree make_assert_failed_body(location_t here, tree cond_expr) {
     free_expr_list(&params.decl_repr_exprs.list); // done with this
 
     // print the repr buf now
+    char buf[128];
+    (void)snprintf(buf, sizeof(buf), BOLD_RED("E") " assert(%s%%s%s)\n", swapped ? "!(" : "", swapped ? ")" : "");
     tree printf_call = my_build_function_call(here, printf_decl,
-        tree_cons(NULL_TREE, build_string_literal_from_literal(here, BOLD_RED("E") " assert(%s)\n"),
+        tree_cons(NULL_TREE, build_string_literal_here(here, strlen(buf) + 1, buf),
         tree_cons(NULL_TREE, buf_param, NULL_TREE)));
     append_to_statement_list(printf_call, &stmts);
 
@@ -1027,7 +1029,7 @@ static tree make_assert_failed_body(location_t here, tree cond_expr) {
         &stmts);
 
     // recreate the repr from AST
-    make_assert_expr_printf_from_ast(here, COND_EXPR_COND(cond_expr), &params.subexpr_colors, &first_stmts);
+    make_assert_expr_printf_from_ast(here, COND_EXPR_COND(cond_expr), &params.subexpr_colors, &first_stmts, swapped);
     free_expr_list(&params.subexpr_colors);
 
     // print subexpr_buf - that's all subexpressions we added.
@@ -1054,11 +1056,19 @@ static tree patch_assert(tree cond_expr) {
     // comment out when you wanna see the expression we're about to instrument
     // debug_tree(COND_EXPR_COND(cond_expr));
 
-    tree bind = make_assert_failed_body(here, cond_expr);
+    // does the assert trigger if the condition *passes* or if the condition *fails*?
+    // asserts are written to trigger when the conditions fails. so swapped=true means they trigger
+    // when the condition passes - so we have to print the swapped condition.
+    const bool swapped = assert_fail_in_then(cond_expr);
+
+    tree bind = make_assert_failed_body(here, cond_expr, swapped);
 
     // `(original_cond) ? (void)0 : { ... our bind expr ... }`
+    // or
+    // `(original_cond) ? { ... our bind expr ... } : (void)0`
+    tree nop = simple_nop_void(here, integer_zero_node);
     tree new_cond = build3_loc(here, COND_EXPR, void_type_node, COND_EXPR_COND(cond_expr),
-        simple_nop_void(here, integer_zero_node), bind);
+        swapped ? bind : nop, swapped ? nop : bind);
 
     return new_cond;
 }
